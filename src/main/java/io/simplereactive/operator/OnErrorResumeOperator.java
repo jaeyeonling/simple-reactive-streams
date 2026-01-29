@@ -86,7 +86,6 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
         
         private final AtomicReference<Subscription> upstream = new AtomicReference<>();
         private final AtomicBoolean done = new AtomicBoolean(false);
-        private final AtomicBoolean usingFallback = new AtomicBoolean(false);
 
         OnErrorResumeSubscriber(
                 Subscriber<? super T> downstream,
@@ -142,7 +141,6 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
             }
 
             // fallback으로 전환
-            usingFallback.set(true);
             fallbackPublisher.subscribe(new FallbackSubscriber<>(downstream, done, upstream));
         }
 
