@@ -3,8 +3,8 @@ package io.simplereactive.core;
 import io.simplereactive.operator.FilterOperator;
 import io.simplereactive.operator.MapOperator;
 import io.simplereactive.operator.TakeOperator;
+import io.simplereactive.publisher.ArrayPublisher;
 
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -17,7 +17,7 @@ import java.util.function.Predicate;
  *
  * <h2>사용 예시</h2>
  * <pre>{@code
- * Flux.from(1, 2, 3, 4, 5)
+ * Flux.just(1, 2, 3, 4, 5)
  *     .map(x -> x * 2)
  *     .filter(x -> x > 5)
  *     .take(2)
@@ -42,6 +42,10 @@ import java.util.function.Predicate;
  * </pre>
  *
  * @param <T> 요소 타입
+ * @see ArrayPublisher
+ * @see MapOperator
+ * @see FilterOperator
+ * @see TakeOperator
  */
 public class Flux<T> implements Publisher<T> {
 
@@ -75,9 +79,12 @@ public class Flux<T> implements Publisher<T> {
     /**
      * 주어진 요소들로 Flux를 생성합니다.
      *
+     * <p>내부적으로 {@link ArrayPublisher}를 사용합니다.
+     *
      * @param items 발행할 요소들
      * @param <T> 요소 타입
      * @return Flux 인스턴스
+     * @throws NullPointerException items가 null이거나 null 요소를 포함하는 경우
      */
     @SafeVarargs
     @SuppressWarnings("varargs")
@@ -89,26 +96,20 @@ public class Flux<T> implements Publisher<T> {
     /**
      * 비어있는 Flux를 생성합니다.
      *
+     * <p>구독 시 즉시 onComplete를 호출합니다.
+     *
      * @param <T> 요소 타입
      * @return 빈 Flux
      */
+    @SuppressWarnings("unchecked")
     public static <T> Flux<T> empty() {
-        return new Flux<>(subscriber -> {
-            subscriber.onSubscribe(new Subscription() {
-                @Override
-                public void request(long n) {
-                    subscriber.onComplete();
-                }
-
-                @Override
-                public void cancel() {
-                }
-            });
-        });
+        return (Flux<T>) EmptyFlux.INSTANCE;
     }
 
     /**
      * 정수 범위로 Flux를 생성합니다.
+     *
+     * <p>start부터 시작하여 count개의 연속된 정수를 발행합니다.
      *
      * @param start 시작값 (포함)
      * @param count 개수
@@ -189,56 +190,35 @@ public class Flux<T> implements Publisher<T> {
         source.subscribe(subscriber);
     }
 
-    // ========== 내부 ArrayPublisher ==========
+    // ========== 내부 클래스 ==========
 
     /**
-     * 배열 요소를 발행하는 간단한 Publisher.
+     * 빈 Flux 싱글톤.
      */
-    private static class ArrayPublisher<T> implements Publisher<T> {
+    private static final class EmptyFlux<T> extends Flux<T> {
 
-        private final T[] items;
+        @SuppressWarnings("rawtypes")
+        static final EmptyFlux INSTANCE = new EmptyFlux<>();
 
-        @SafeVarargs
-        @SuppressWarnings("varargs")
-        ArrayPublisher(T... items) {
-            this.items = Arrays.copyOf(items, items.length);
-        }
+        private EmptyFlux() {
+            super(subscriber -> {
+                subscriber.onSubscribe(new Subscription() {
+                    private volatile boolean done = false;
 
-        @Override
-        public void subscribe(Subscriber<? super T> subscriber) {
-            subscriber.onSubscribe(new ArraySubscription<>(subscriber, items));
-        }
+                    @Override
+                    public void request(long n) {
+                        if (!done && n > 0) {
+                            done = true;
+                            subscriber.onComplete();
+                        }
+                    }
 
-        static class ArraySubscription<T> implements Subscription {
-            private final Subscriber<? super T> subscriber;
-            private final T[] items;
-            private int index = 0;
-            private volatile boolean cancelled = false;
-
-            ArraySubscription(Subscriber<? super T> subscriber, T[] items) {
-                this.subscriber = subscriber;
-                this.items = items;
-            }
-
-            @Override
-            public void request(long n) {
-                if (cancelled) return;
-
-                long remaining = n;
-                while (remaining > 0 && index < items.length && !cancelled) {
-                    subscriber.onNext(items[index++]);
-                    remaining--;
-                }
-
-                if (index >= items.length && !cancelled) {
-                    subscriber.onComplete();
-                }
-            }
-
-            @Override
-            public void cancel() {
-                cancelled = true;
-            }
+                    @Override
+                    public void cancel() {
+                        done = true;
+                    }
+                });
+            });
         }
     }
 }
