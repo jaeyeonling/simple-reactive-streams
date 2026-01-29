@@ -16,15 +16,14 @@ repositories {
 }
 
 dependencies {
-    // Reactive Streams API (참조용, 우리가 직접 구현할 것)
-    compileOnly("org.reactivestreams:reactive-streams:1.0.4")
-    
     // Testing
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core:3.25.3")
     
     // Reactive Streams TCK (Technology Compatibility Kit)
+    // TCK 사용 시 org.reactivestreams 인터페이스가 필요하므로,
+    // 우리가 만든 인터페이스를 TCK의 인터페이스로 어댑팅해야 함
     testImplementation("org.reactivestreams:reactive-streams-tck:1.0.4")
 }
 
