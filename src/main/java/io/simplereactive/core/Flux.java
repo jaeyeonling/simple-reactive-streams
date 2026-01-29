@@ -103,7 +103,7 @@ public class Flux<T> implements Publisher<T> {
      */
     @SuppressWarnings("unchecked")
     public static <T> Flux<T> empty() {
-        return (Flux<T>) EmptyFlux.INSTANCE;
+        return new Flux<>((Publisher<T>) EmptyPublisher.INSTANCE);
     }
 
     /**
@@ -193,32 +193,42 @@ public class Flux<T> implements Publisher<T> {
     // ========== 내부 클래스 ==========
 
     /**
-     * 빈 Flux 싱글톤.
+     * 빈 Publisher 구현.
      */
-    private static final class EmptyFlux<T> extends Flux<T> {
+    private static final class EmptyPublisher<T> implements Publisher<T> {
 
         @SuppressWarnings("rawtypes")
-        static final EmptyFlux INSTANCE = new EmptyFlux<>();
+        static final EmptyPublisher INSTANCE = new EmptyPublisher<>();
 
-        private EmptyFlux() {
-            super(subscriber -> {
-                subscriber.onSubscribe(new Subscription() {
-                    private volatile boolean done = false;
+        @Override
+        public void subscribe(Subscriber<? super T> subscriber) {
+            subscriber.onSubscribe(new EmptySubscription<>(subscriber));
+        }
+    }
 
-                    @Override
-                    public void request(long n) {
-                        if (!done && n > 0) {
-                            done = true;
-                            subscriber.onComplete();
-                        }
-                    }
+    /**
+     * 빈 Subscription 구현.
+     */
+    private static final class EmptySubscription<T> implements Subscription {
 
-                    @Override
-                    public void cancel() {
-                        done = true;
-                    }
-                });
-            });
+        private final Subscriber<? super T> subscriber;
+        private volatile boolean done = false;
+
+        EmptySubscription(Subscriber<? super T> subscriber) {
+            this.subscriber = subscriber;
+        }
+
+        @Override
+        public void request(long n) {
+            if (!done && n > 0) {
+                done = true;
+                subscriber.onComplete();
+            }
+        }
+
+        @Override
+        public void cancel() {
+            done = true;
         }
     }
 }
