@@ -4,7 +4,7 @@ Reactive Streams 스펙을 직접 구현하며 학습하는 PBL(Problem-Based Le
 
 ## Tech Stack
 
-- Language: Java 21
+- Language: Java 25
 - Build: Gradle 8.5 (Kotlin DSL)
 - Testing: JUnit 5 + Reactive Streams TCK
 - Package: io.simplereactive
