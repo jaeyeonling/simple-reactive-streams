@@ -91,8 +91,11 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
 
     @Override
     public void onSubscribe(Subscription s) {
+        // Rule 2.5: 이미 구독된 경우 새 Subscription을 cancel하고 에러 시그널
         if (this.upstream != null) {
             s.cancel();
+            onError(new IllegalStateException(
+                    "Rule 2.5: onSubscribe must not be called more than once"));
             return;
         }
         
@@ -106,6 +109,14 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
     @Override
     public void onNext(T item) {
         if (terminated.get() || cancelled.get()) {
+            return;
+        }
+
+        // Rule 2.13: null 체크
+        if (item == null) {
+            upstream.cancel();
+            onError(new NullPointerException(
+                    "Rule 2.13: onNext must not be called with null"));
             return;
         }
 
@@ -157,6 +168,7 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
                 if (terminated.compareAndSet(false, true)) {
                     upstream.cancel();
                     error = new BufferOverflowException(bufferSize);
+                    drain(); // 에러 즉시 전달
                 }
                 break;
         }

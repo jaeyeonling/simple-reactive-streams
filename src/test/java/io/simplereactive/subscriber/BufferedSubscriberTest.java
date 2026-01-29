@@ -1,16 +1,11 @@
 package io.simplereactive.subscriber;
 
-import io.simplereactive.core.Subscriber;
-import io.simplereactive.core.Subscription;
 import io.simplereactive.publisher.ArrayPublisher;
+import io.simplereactive.test.ManualSubscription;
 import io.simplereactive.test.TestSubscriber;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -200,6 +195,53 @@ class BufferedSubscriberTest {
     }
 
     @Nested
+    @DisplayName("규약 준수")
+    class SpecCompliance {
+
+        @Test
+        @DisplayName("Rule 2.5: 중복 구독 시 에러")
+        void shouldErrorOnDuplicateSubscription() {
+            // Given
+            var downstream = new TestSubscriber<Integer>();
+            var buffered = new BufferedSubscriber<>(downstream, 10, OverflowStrategy.DROP_LATEST);
+
+            var subscription1 = new ManualSubscription();
+            var subscription2 = new ManualSubscription();
+
+            // When
+            buffered.onSubscribe(subscription1);
+            buffered.onSubscribe(subscription2); // 중복!
+
+            // Then - 두 번째 subscription은 cancel됨
+            assertThat(subscription2.isCancelled()).isTrue();
+            // 에러 발생
+            assertThat(downstream.getError())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Rule 2.5");
+        }
+
+        @Test
+        @DisplayName("Rule 2.13: null item 시 에러")
+        void shouldErrorOnNullItem() {
+            // Given
+            var downstream = new TestSubscriber<Integer>();
+            var buffered = new BufferedSubscriber<>(downstream, 10, OverflowStrategy.DROP_LATEST);
+
+            var subscription = new ManualSubscription();
+            buffered.onSubscribe(subscription);
+
+            // When
+            buffered.onNext(null);
+
+            // Then
+            assertThat(downstream.getError())
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("Rule 2.13");
+            assertThat(subscription.isCancelled()).isTrue();
+        }
+    }
+
+    @Nested
     @DisplayName("생성자 검증")
     class ConstructorValidation {
 
@@ -278,34 +320,6 @@ class BufferedSubscriberTest {
 
             // Then - 버퍼 크기(5)만큼 미리 요청됨
             assertThat(upstreamSubscription.getRequestedCount()).isEqualTo(5);
-        }
-    }
-
-    /**
-     * 테스트용 수동 Subscription.
-     */
-    static class ManualSubscription implements Subscription {
-        private final AtomicInteger requested = new AtomicInteger(0);
-        private volatile boolean cancelled = false;
-
-        @Override
-        public void request(long n) {
-            if (n > 0) {
-                requested.addAndGet((int) Math.min(n, Integer.MAX_VALUE));
-            }
-        }
-
-        @Override
-        public void cancel() {
-            cancelled = true;
-        }
-
-        int getRequestedCount() {
-            return requested.get();
-        }
-
-        boolean isCancelled() {
-            return cancelled;
         }
     }
 }
