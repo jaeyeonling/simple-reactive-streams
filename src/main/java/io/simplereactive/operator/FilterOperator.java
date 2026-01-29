@@ -2,7 +2,6 @@ package io.simplereactive.operator;
 
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
-import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -49,9 +48,8 @@ import java.util.function.Predicate;
  *
  * @param <T> 요소 타입
  */
-public final class FilterOperator<T> implements Publisher<T> {
+public final class FilterOperator<T> extends AbstractOperator<T, T> {
 
-    private final Publisher<T> upstream;
     private final Predicate<? super T> predicate;
 
     /**
@@ -62,49 +60,35 @@ public final class FilterOperator<T> implements Publisher<T> {
      * @throws NullPointerException upstream 또는 predicate가 null인 경우
      */
     public FilterOperator(Publisher<T> upstream, Predicate<? super T> predicate) {
-        this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
+        super(upstream);
         this.predicate = Objects.requireNonNull(predicate, "Predicate must not be null");
     }
 
     @Override
-    public void subscribe(Subscriber<? super T> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
-        upstream.subscribe(new FilterSubscriber<>(subscriber, predicate));
+    protected Subscriber<T> createSubscriber(Subscriber<? super T> downstream) {
+        return new FilterSubscriber<>(downstream, predicate);
     }
 
     /**
      * Filter를 수행하는 Subscriber.
      *
-     * <p>Subscription도 구현하여 downstream의 request를 중개합니다.
-     * 필터링된 요소에 대해 추가 request를 보내기 위함입니다.
+     * <p>필터링된 요소에 대해 추가 request를 보내기 위해
+     * AbstractOperatorSubscriber를 상속합니다.
      *
      * @param <T> 요소 타입
      */
-    private static final class FilterSubscriber<T> implements Subscriber<T>, Subscription {
+    private static final class FilterSubscriber<T> extends AbstractOperatorSubscriber<T, T> {
 
-        private final Subscriber<? super T> downstream;
         private final Predicate<? super T> predicate;
-        private Subscription upstream;
-        private boolean done = false;
 
         FilterSubscriber(Subscriber<? super T> downstream, Predicate<? super T> predicate) {
-            this.downstream = downstream;
+            super(downstream);
             this.predicate = predicate;
-        }
-
-        // ========== Subscriber 구현 ==========
-
-        @Override
-        public void onSubscribe(Subscription s) {
-            this.upstream = s;
-            // 우리가 만든 Subscription(this)을 전달
-            // 필터링된 요소에 대한 추가 request를 처리하기 위함
-            downstream.onSubscribe(this);
         }
 
         @Override
         public void onNext(T item) {
-            if (done) {
+            if (isDone()) {
                 return;
             }
 
@@ -113,7 +97,7 @@ public final class FilterOperator<T> implements Publisher<T> {
                 matches = predicate.test(item);
             } catch (Throwable t) {
                 // predicate에서 예외 발생 시 에러 처리
-                upstream.cancel();
+                cancelUpstream();
                 onError(t);
                 return;
             }
@@ -123,38 +107,22 @@ public final class FilterOperator<T> implements Publisher<T> {
             } else {
                 // 필터링된 요소는 전달되지 않으므로 추가 요청
                 // downstream이 n개 요청했으면 n개를 받아야 함
-                upstream.request(1);
+                request(1);
             }
         }
 
         @Override
         public void onError(Throwable t) {
-            if (done) {
-                return;
+            if (markDone()) {
+                downstream.onError(t);
             }
-            done = true;
-            downstream.onError(t);
         }
 
         @Override
         public void onComplete() {
-            if (done) {
-                return;
+            if (markDone()) {
+                downstream.onComplete();
             }
-            done = true;
-            downstream.onComplete();
-        }
-
-        // ========== Subscription 구현 ==========
-
-        @Override
-        public void request(long n) {
-            upstream.request(n);
-        }
-
-        @Override
-        public void cancel() {
-            upstream.cancel();
         }
     }
 }

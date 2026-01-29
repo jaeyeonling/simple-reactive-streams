@@ -2,10 +2,8 @@ package io.simplereactive.operator;
 
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
-import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -45,9 +43,8 @@ import java.util.function.Function;
  *
  * @param <T> 요소 타입
  */
-public final class OnErrorReturnOperator<T> implements Publisher<T> {
+public final class OnErrorReturnOperator<T> extends AbstractOperator<T, T> {
 
-    private final Publisher<T> upstream;
     private final Function<? super Throwable, ? extends T> fallback;
 
     /**
@@ -60,7 +57,7 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
     public OnErrorReturnOperator(
             Publisher<T> upstream,
             Function<? super Throwable, ? extends T> fallback) {
-        this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
+        super(upstream);
         this.fallback = Objects.requireNonNull(fallback, "Fallback must not be null");
     }
 
@@ -72,46 +69,33 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
      * @throws NullPointerException upstream 또는 defaultValue가 null인 경우
      */
     public OnErrorReturnOperator(Publisher<T> upstream, T defaultValue) {
-        this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
+        super(upstream);
         Objects.requireNonNull(defaultValue, "Default value must not be null");
         this.fallback = error -> defaultValue;
     }
 
     @Override
-    public void subscribe(Subscriber<? super T> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
-        upstream.subscribe(new OnErrorReturnSubscriber<>(subscriber, fallback));
+    protected Subscriber<T> createSubscriber(Subscriber<? super T> downstream) {
+        return new OnErrorReturnSubscriber<>(downstream, fallback);
     }
 
     /**
      * OnErrorReturn을 수행하는 Subscriber.
      */
-    private static final class OnErrorReturnSubscriber<T> implements Subscriber<T>, Subscription {
+    private static final class OnErrorReturnSubscriber<T> extends AbstractOperatorSubscriber<T, T> {
 
-        private final Subscriber<? super T> downstream;
         private final Function<? super Throwable, ? extends T> fallback;
-        
-        private Subscription upstream;
-        private final AtomicBoolean done = new AtomicBoolean(false);
 
         OnErrorReturnSubscriber(
                 Subscriber<? super T> downstream,
                 Function<? super Throwable, ? extends T> fallback) {
-            this.downstream = downstream;
+            super(downstream);
             this.fallback = fallback;
-        }
-
-        // ========== Subscriber 구현 ==========
-
-        @Override
-        public void onSubscribe(Subscription s) {
-            this.upstream = s;
-            downstream.onSubscribe(this);
         }
 
         @Override
         public void onNext(T item) {
-            if (done.get()) {
+            if (isDone()) {
                 return;
             }
             downstream.onNext(item);
@@ -119,7 +103,7 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
 
         @Override
         public void onError(Throwable t) {
-            if (done.get()) {
+            if (isDone()) {
                 return;
             }
 
@@ -130,7 +114,7 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
             } catch (Throwable ex) {
                 // fallback 함수에서 예외 발생 시 원래 에러와 함께 전달
                 ex.addSuppressed(t);
-                if (done.compareAndSet(false, true)) {
+                if (markDone()) {
                     downstream.onError(ex);
                 }
                 return;
@@ -138,7 +122,7 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
 
             // Rule 2.13: null 체크
             if (defaultValue == null) {
-                if (done.compareAndSet(false, true)) {
+                if (markDone()) {
                     downstream.onError(new NullPointerException(
                             "Fallback returned null for error: " + t));
                 }
@@ -146,7 +130,7 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
             }
 
             // 기본값 발행 후 완료
-            if (done.compareAndSet(false, true)) {
+            if (markDone()) {
                 downstream.onNext(defaultValue);
                 downstream.onComplete();
             }
@@ -154,22 +138,8 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
 
         @Override
         public void onComplete() {
-            if (done.compareAndSet(false, true)) {
+            if (markDone()) {
                 downstream.onComplete();
-            }
-        }
-
-        // ========== Subscription 구현 ==========
-
-        @Override
-        public void request(long n) {
-            upstream.request(n);
-        }
-
-        @Override
-        public void cancel() {
-            if (done.compareAndSet(false, true)) {
-                upstream.cancel();
             }
         }
     }

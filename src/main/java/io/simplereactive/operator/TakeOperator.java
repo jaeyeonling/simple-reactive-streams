@@ -2,10 +2,8 @@ package io.simplereactive.operator;
 
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
-import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -50,9 +48,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @param <T> 요소 타입
  */
-public final class TakeOperator<T> implements Publisher<T> {
+public final class TakeOperator<T> extends AbstractOperator<T, T> {
 
-    private final Publisher<T> upstream;
     private final long limit;
 
     /**
@@ -64,7 +61,7 @@ public final class TakeOperator<T> implements Publisher<T> {
      * @throws IllegalArgumentException limit이 0 이하인 경우
      */
     public TakeOperator(Publisher<T> upstream, long limit) {
-        this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
+        super(upstream);
         if (limit <= 0) {
             throw new IllegalArgumentException("Limit must be positive, but was " + limit);
         }
@@ -72,42 +69,32 @@ public final class TakeOperator<T> implements Publisher<T> {
     }
 
     @Override
-    public void subscribe(Subscriber<? super T> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
-        upstream.subscribe(new TakeSubscriber<>(subscriber, limit));
+    protected Subscriber<T> createSubscriber(Subscriber<? super T> downstream) {
+        return new TakeSubscriber<>(downstream, limit);
     }
 
     /**
      * Take를 수행하는 Subscriber.
      *
-     * <p>AtomicLong과 AtomicBoolean을 사용하여 스레드 안전성을 보장합니다.
+     * <p>AtomicLong을 사용하여 스레드 안전성을 보장합니다.
+     * request를 limit에 맞게 제한하는 특수한 로직이 필요하므로
+     * request()를 오버라이드합니다.
      *
      * @param <T> 요소 타입
      */
-    private static final class TakeSubscriber<T> implements Subscriber<T>, Subscription {
+    private static final class TakeSubscriber<T> extends AbstractOperatorSubscriber<T, T> {
 
-        private final Subscriber<? super T> downstream;
         private final long limit;
         private final AtomicLong count = new AtomicLong(0);
-        private final AtomicBoolean done = new AtomicBoolean(false);
-        private Subscription upstream;
 
         TakeSubscriber(Subscriber<? super T> downstream, long limit) {
-            this.downstream = downstream;
+            super(downstream);
             this.limit = limit;
-        }
-
-        // ========== Subscriber 구현 ==========
-
-        @Override
-        public void onSubscribe(Subscription s) {
-            this.upstream = s;
-            downstream.onSubscribe(this);
         }
 
         @Override
         public void onNext(T item) {
-            if (done.get()) {
+            if (isDone()) {
                 return;
             }
 
@@ -116,8 +103,8 @@ public final class TakeOperator<T> implements Publisher<T> {
 
             if (c >= limit) {
                 // limit에 도달하면 완료
-                if (done.compareAndSet(false, true)) {
-                    upstream.cancel();
+                if (markDone()) {
+                    cancelUpstream();
                     downstream.onComplete();
                 }
             }
@@ -125,20 +112,25 @@ public final class TakeOperator<T> implements Publisher<T> {
 
         @Override
         public void onError(Throwable t) {
-            if (done.compareAndSet(false, true)) {
+            if (markDone()) {
                 downstream.onError(t);
             }
         }
 
         @Override
         public void onComplete() {
-            if (done.compareAndSet(false, true)) {
+            if (markDone()) {
                 downstream.onComplete();
             }
         }
 
-        // ========== Subscription 구현 ==========
-
+        /**
+         * downstream의 request를 남은 개수에 맞게 제한하여 upstream에 전달합니다.
+         *
+         * <p>불필요한 데이터 생성을 방지하기 위해 limit - count 이하로만 요청합니다.
+         *
+         * @param n 요청할 데이터 개수
+         */
         @Override
         public void request(long n) {
             if (n <= 0) {
@@ -146,7 +138,7 @@ public final class TakeOperator<T> implements Publisher<T> {
             }
 
             // 이미 완료되었으면 무시
-            if (done.get()) {
+            if (isDone()) {
                 return;
             }
 
@@ -160,14 +152,7 @@ public final class TakeOperator<T> implements Publisher<T> {
 
             // n과 remaining 중 작은 값만 요청
             long toRequest = Math.min(n, remaining);
-            upstream.request(toRequest);
-        }
-
-        @Override
-        public void cancel() {
-            if (done.compareAndSet(false, true)) {
-                upstream.cancel();
-            }
+            super.request(toRequest);
         }
     }
 }
