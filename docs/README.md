@@ -138,7 +138,7 @@ Module 8: 레거시 리팩터링             ⏱️ 3~4시간 ★★★★★
 
 ```bash
 # 1. 환경 확인
-java -version    # Java 21 이상
+java -version    # Java 25 이상
 
 # 2. 빌드 테스트
 ./gradlew build

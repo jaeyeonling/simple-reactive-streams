@@ -131,8 +131,8 @@ Reactive Streams는 **39개의 규칙**으로 구성:
 
 ### 필수 요구사항
 
-- Java 21 이상
-- Gradle 8.5 이상
+- Java 25 이상
+- Gradle 8.14 이상
 
 ### 환경 확인
 
@@ -159,7 +159,7 @@ java -version
 IntelliJ IDEA:
 1. File → Open → 프로젝트 폴더 선택
 2. Gradle 프로젝트로 Import
-3. JDK 21 설정 확인
+3. JDK 25 설정 확인
 
 ---
 
@@ -190,7 +190,7 @@ simple-reactivestreams/
 
 다음 체크리스트를 완료하면 Module 0 완료입니다:
 
-- [ ] Java 21 설치 확인
+- [ ] Java 25 설치 확인
 - [ ] `./gradlew build` 성공
 - [ ] `./gradlew test` 실행 (아직 테스트 없어도 OK)
 - [ ] Reactive Streams의 4가지 인터페이스 이해
