@@ -72,7 +72,9 @@ public final class OnErrorReturnOperator<T> implements Publisher<T> {
      * @throws NullPointerException upstream 또는 defaultValue가 null인 경우
      */
     public OnErrorReturnOperator(Publisher<T> upstream, T defaultValue) {
-        this(upstream, error -> Objects.requireNonNull(defaultValue, "Default value must not be null"));
+        this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
+        Objects.requireNonNull(defaultValue, "Default value must not be null");
+        this.fallback = error -> defaultValue;
     }
 
     @Override
