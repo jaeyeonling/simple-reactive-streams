@@ -4,6 +4,8 @@ import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * 빈 Publisher 구현.
  *
@@ -53,11 +55,12 @@ public final class EmptyPublisher<T> implements Publisher<T> {
      * 빈 Subscription 구현.
      *
      * <p>request 시 즉시 onComplete를 호출합니다.
+     * AtomicBoolean을 사용하여 스레드 안전성을 보장합니다.
      */
     private static final class EmptySubscription implements Subscription {
 
         private final Subscriber<?> subscriber;
-        private volatile boolean done = false;
+        private final AtomicBoolean done = new AtomicBoolean(false);
 
         EmptySubscription(Subscriber<?> subscriber) {
             this.subscriber = subscriber;
@@ -65,15 +68,24 @@ public final class EmptyPublisher<T> implements Publisher<T> {
 
         @Override
         public void request(long n) {
-            if (!done && n > 0) {
-                done = true;
+            // Rule 3.9: n <= 0이면 에러
+            if (n <= 0) {
+                if (done.compareAndSet(false, true)) {
+                    subscriber.onError(new IllegalArgumentException(
+                            "Rule 3.9: request amount must be positive, but was " + n));
+                }
+                return;
+            }
+
+            // compareAndSet으로 단 한 번만 onComplete 호출 보장
+            if (done.compareAndSet(false, true)) {
                 subscriber.onComplete();
             }
         }
 
         @Override
         public void cancel() {
-            done = true;
+            done.set(true);
         }
     }
 }
