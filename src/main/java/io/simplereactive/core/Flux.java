@@ -4,6 +4,8 @@ import io.simplereactive.operator.FilterOperator;
 import io.simplereactive.operator.MapOperator;
 import io.simplereactive.operator.TakeOperator;
 import io.simplereactive.publisher.ArrayPublisher;
+import io.simplereactive.publisher.EmptyPublisher;
+import io.simplereactive.publisher.RangePublisher;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -43,6 +45,8 @@ import java.util.function.Predicate;
  *
  * @param <T> 요소 타입
  * @see ArrayPublisher
+ * @see EmptyPublisher
+ * @see RangePublisher
  * @see MapOperator
  * @see FilterOperator
  * @see TakeOperator
@@ -51,12 +55,14 @@ public class Flux<T> implements Publisher<T> {
 
     private final Publisher<T> source;
 
+    // ========== 생성자 ==========
+
     /**
      * 기존 Publisher를 감싸는 Flux를 생성합니다.
      *
      * @param source 원본 Publisher
      */
-    private Flux(Publisher<T> source) {
+    protected Flux(Publisher<T> source) {
         this.source = Objects.requireNonNull(source, "Source must not be null");
     }
 
@@ -79,12 +85,11 @@ public class Flux<T> implements Publisher<T> {
     /**
      * 주어진 요소들로 Flux를 생성합니다.
      *
-     * <p>내부적으로 {@link ArrayPublisher}를 사용합니다.
-     *
      * @param items 발행할 요소들
      * @param <T> 요소 타입
      * @return Flux 인스턴스
      * @throws NullPointerException items가 null이거나 null 요소를 포함하는 경우
+     * @see ArrayPublisher
      */
     @SafeVarargs
     @SuppressWarnings("varargs")
@@ -100,10 +105,10 @@ public class Flux<T> implements Publisher<T> {
      *
      * @param <T> 요소 타입
      * @return 빈 Flux
+     * @see EmptyPublisher
      */
-    @SuppressWarnings("unchecked")
     public static <T> Flux<T> empty() {
-        return new Flux<>((Publisher<T>) EmptyPublisher.INSTANCE);
+        return new Flux<>(EmptyPublisher.instance());
     }
 
     /**
@@ -114,16 +119,13 @@ public class Flux<T> implements Publisher<T> {
      * @param start 시작값 (포함)
      * @param count 개수
      * @return 범위 Flux
+     * @see RangePublisher
      */
     public static Flux<Integer> range(int start, int count) {
         if (count <= 0) {
             return empty();
         }
-        Integer[] items = new Integer[count];
-        for (int i = 0; i < count; i++) {
-            items[i] = start + i;
-        }
-        return new Flux<>(new ArrayPublisher<>(items));
+        return new Flux<>(new RangePublisher(start, count));
     }
 
     // ========== Operator 메서드 ==========
@@ -142,6 +144,7 @@ public class Flux<T> implements Publisher<T> {
      * @param mapper 변환 함수
      * @param <R> 결과 타입
      * @return 변환된 Flux
+     * @see MapOperator
      */
     public <R> Flux<R> map(Function<? super T, ? extends R> mapper) {
         return new Flux<>(new MapOperator<>(this, mapper));
@@ -160,6 +163,7 @@ public class Flux<T> implements Publisher<T> {
      *
      * @param predicate 필터 조건
      * @return 필터링된 Flux
+     * @see FilterOperator
      */
     public Flux<T> filter(Predicate<? super T> predicate) {
         return new Flux<>(new FilterOperator<>(this, predicate));
@@ -178,6 +182,7 @@ public class Flux<T> implements Publisher<T> {
      *
      * @param n 가져올 개수
      * @return 제한된 Flux
+     * @see TakeOperator
      */
     public Flux<T> take(long n) {
         return new Flux<>(new TakeOperator<>(this, n));
@@ -188,47 +193,5 @@ public class Flux<T> implements Publisher<T> {
     @Override
     public void subscribe(Subscriber<? super T> subscriber) {
         source.subscribe(subscriber);
-    }
-
-    // ========== 내부 클래스 ==========
-
-    /**
-     * 빈 Publisher 구현.
-     */
-    private static final class EmptyPublisher<T> implements Publisher<T> {
-
-        @SuppressWarnings("rawtypes")
-        static final EmptyPublisher INSTANCE = new EmptyPublisher<>();
-
-        @Override
-        public void subscribe(Subscriber<? super T> subscriber) {
-            subscriber.onSubscribe(new EmptySubscription<>(subscriber));
-        }
-    }
-
-    /**
-     * 빈 Subscription 구현.
-     */
-    private static final class EmptySubscription<T> implements Subscription {
-
-        private final Subscriber<? super T> subscriber;
-        private volatile boolean done = false;
-
-        EmptySubscription(Subscriber<? super T> subscriber) {
-            this.subscriber = subscriber;
-        }
-
-        @Override
-        public void request(long n) {
-            if (!done && n > 0) {
-                done = true;
-                subscriber.onComplete();
-            }
-        }
-
-        @Override
-        public void cancel() {
-            done = true;
-        }
     }
 }
