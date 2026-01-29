@@ -2,7 +2,6 @@ package io.simplereactive.operator;
 
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
-import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -43,8 +42,9 @@ import java.util.function.Function;
  *
  * @param <T> 입력 타입
  * @param <R> 출력 타입
+ * @see MapSubscriber
  */
-public class MapOperator<T, R> implements Publisher<R> {
+public final class MapOperator<T, R> implements Publisher<R> {
 
     private final Publisher<T> upstream;
     private final Function<? super T, ? extends R> mapper;
@@ -65,76 +65,5 @@ public class MapOperator<T, R> implements Publisher<R> {
     public void subscribe(Subscriber<? super R> subscriber) {
         Objects.requireNonNull(subscriber, "Subscriber must not be null");
         upstream.subscribe(new MapSubscriber<>(subscriber, mapper));
-    }
-
-    /**
-     * Map 변환을 수행하는 Subscriber.
-     *
-     * @param <T> 입력 타입
-     * @param <R> 출력 타입
-     */
-    static class MapSubscriber<T, R> implements Subscriber<T> {
-
-        private final Subscriber<? super R> downstream;
-        private final Function<? super T, ? extends R> mapper;
-        private Subscription upstream;
-        private boolean done = false;
-
-        MapSubscriber(Subscriber<? super R> downstream, Function<? super T, ? extends R> mapper) {
-            this.downstream = downstream;
-            this.mapper = mapper;
-        }
-
-        @Override
-        public void onSubscribe(Subscription s) {
-            this.upstream = s;
-            // Subscription을 그대로 전달 (1:1 변환이므로)
-            downstream.onSubscribe(s);
-        }
-
-        @Override
-        public void onNext(T item) {
-            if (done) {
-                return;
-            }
-
-            R mapped;
-            try {
-                mapped = mapper.apply(item);
-            } catch (Throwable t) {
-                // mapper에서 예외 발생 시 에러 처리
-                upstream.cancel();
-                onError(t);
-                return;
-            }
-
-            // Rule 2.13: null 체크
-            if (mapped == null) {
-                upstream.cancel();
-                onError(new NullPointerException(
-                        "Mapper returned null for item: " + item));
-                return;
-            }
-
-            downstream.onNext(mapped);
-        }
-
-        @Override
-        public void onError(Throwable t) {
-            if (done) {
-                return;
-            }
-            done = true;
-            downstream.onError(t);
-        }
-
-        @Override
-        public void onComplete() {
-            if (done) {
-                return;
-            }
-            done = true;
-            downstream.onComplete();
-        }
     }
 }
