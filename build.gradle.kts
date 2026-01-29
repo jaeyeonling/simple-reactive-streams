@@ -17,9 +17,12 @@ repositories {
 
 dependencies {
     // Testing
-    testImplementation(platform("org.junit:junit-bom:5.10.2"))
+    testImplementation(platform("org.junit:junit-bom:6.0.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.assertj:assertj-core:3.25.3")
+    testImplementation("org.assertj:assertj-core:3.27.7")
+    
+    // JUnit Platform Launcher (JUnit 6에서 필수)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     
     // Reactive Streams TCK (Technology Compatibility Kit)
     // TCK 사용 시 org.reactivestreams 인터페이스가 필요하므로,
