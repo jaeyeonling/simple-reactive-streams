@@ -335,6 +335,10 @@ public class BufferedSubscription<T> implements Subscription {
     /**
      * 에러 상태를 체크하고 에러가 있으면 downstream에 전달합니다.
      *
+     * <p>terminated 상태를 먼저 체크하여 error 필드와의 happens-before
+     * 관계를 보장합니다. error 필드는 terminated가 true가 된 후에만
+     * 설정되므로 이 순서가 안전합니다.
+     *
      * @return 종료되어야 하면 true
      */
     private boolean checkTerminatedWithError() {
@@ -343,11 +347,14 @@ public class BufferedSubscription<T> implements Subscription {
             return true;
         }
 
-        Throwable e = error;
-        if (e != null && terminated.get()) {
-            clearBuffer();
-            downstream.onError(e);
-            return true;
+        // terminated 먼저 체크 후 error 읽기 (happens-before 보장)
+        if (terminated.get()) {
+            Throwable e = error;
+            if (e != null) {
+                clearBuffer();
+                downstream.onError(e);
+                return true;
+            }
         }
 
         return false;

@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public abstract class BaseSubscription<T> implements Subscription {
 
-    protected final Subscriber<? super T> subscriber;
+    private final Subscriber<? super T> subscriber;
 
     private final AtomicLong requested = new AtomicLong(0);
     private final AtomicBoolean cancelled = new AtomicBoolean(false);

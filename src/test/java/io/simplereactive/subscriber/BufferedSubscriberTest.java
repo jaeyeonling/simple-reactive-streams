@@ -7,6 +7,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -300,6 +304,26 @@ class BufferedSubscriberTest {
             // Then
             assertThat(upstreamSubscription.isCancelled()).isTrue();
         }
+
+        @Test
+        @DisplayName("Rule 3.5: cancel은 멱등성을 가짐")
+        void shouldBeIdempotentOnMultipleCancels() {
+            // Given
+            var downstream = new TestSubscriber<Integer>();
+            var buffered = new BufferedSubscriber<>(downstream, 10, OverflowStrategy.DROP_LATEST);
+
+            var upstreamSubscription = new ManualSubscription();
+            buffered.onSubscribe(upstreamSubscription);
+
+            // When - 여러 번 cancel 호출
+            downstream.cancel();
+            downstream.cancel();
+            downstream.cancel();
+
+            // Then - 예외 없이 안전하게 처리
+            assertThat(upstreamSubscription.isCancelled()).isTrue();
+            assertThat(downstream.getError()).isNull();
+        }
     }
 
     @Nested
@@ -320,6 +344,67 @@ class BufferedSubscriberTest {
 
             // Then - 버퍼 크기(5)만큼 미리 요청됨
             assertThat(upstreamSubscription.getRequestedCount()).isEqualTo(5);
+        }
+    }
+
+    @Nested
+    @DisplayName("동시성 테스트")
+    class ConcurrencyTest {
+
+        @Test
+        @DisplayName("여러 스레드에서 동시에 request해도 안전")
+        void shouldHandleConcurrentRequests() throws InterruptedException {
+            // Given
+            var downstream = new TestSubscriber<Integer>();
+            var buffered = new BufferedSubscriber<>(downstream, 100, OverflowStrategy.DROP_LATEST);
+            var subscription = new ManualSubscription();
+
+            buffered.onSubscribe(subscription);
+
+            // 100개 데이터 전송
+            for (int i = 1; i <= 100; i++) {
+                buffered.onNext(i);
+            }
+            buffered.onComplete();
+
+            int threadCount = 10;
+            var latch = new CountDownLatch(threadCount);
+            var executor = Executors.newFixedThreadPool(threadCount);
+
+            // When - 여러 스레드에서 동시에 request
+            for (int i = 0; i < threadCount; i++) {
+                executor.submit(() -> {
+                    try {
+                        downstream.request(10);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            latch.await(5, TimeUnit.SECONDS);
+            executor.shutdown();
+
+            // Then - 모든 요소가 정확히 한 번씩 전달됨
+            assertThat(downstream.getReceivedItems()).hasSize(100);
+            assertThat(downstream.isCompleted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Long.MAX_VALUE 요청 시 unbounded 동작")
+        void shouldHandleUnboundedRequest() {
+            // Given
+            var downstream = new TestSubscriber<Integer>();
+            var buffered = new BufferedSubscriber<>(downstream, 10, OverflowStrategy.DROP_LATEST);
+            var publisher = new ArrayPublisher<>(1, 2, 3, 4, 5);
+
+            // When
+            publisher.subscribe(buffered);
+            downstream.request(Long.MAX_VALUE);
+
+            // Then
+            assertThat(downstream.getReceivedItems()).containsExactly(1, 2, 3, 4, 5);
+            assertThat(downstream.isCompleted()).isTrue();
         }
     }
 }

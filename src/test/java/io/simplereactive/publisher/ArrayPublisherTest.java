@@ -5,6 +5,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -126,6 +132,32 @@ class ArrayPublisherTest {
 
             // Then - cancel 후에도 이미 받은 데이터는 유지
             assertThat(subscriber.getReceivedItems()).containsExactly(1, 2);
+        }
+
+        @Test
+        @DisplayName("Rule 3.5: cancel은 멱등성을 가짐")
+        void shouldBeIdempotentOnMultipleCancels() {
+            // Given
+            var publisher = new ArrayPublisher<>(1, 2, 3, 4, 5);
+            var subscriber = new TestSubscriber<Integer>();
+
+            // When
+            publisher.subscribe(subscriber);
+            subscriber.request(2);
+
+            // Then - 첫 번째 cancel
+            subscriber.cancel();
+            assertThat(subscriber.getReceivedItems()).containsExactly(1, 2);
+
+            // When - 여러 번 cancel 호출해도 예외 없이 안전
+            subscriber.cancel();
+            subscriber.cancel();
+            subscriber.cancel();
+
+            // Then - 상태 변화 없음
+            assertThat(subscriber.getReceivedItems()).containsExactly(1, 2);
+            assertThat(subscriber.isCompleted()).isFalse();
+            assertThat(subscriber.getError()).isNull();
         }
     }
 
@@ -258,6 +290,80 @@ class ArrayPublisherTest {
             // Then
             assertThat(subscriber1.getReceivedItems()).containsExactly(1, 2);
             assertThat(subscriber2.getReceivedItems()).containsExactly(1, 2, 3);
+        }
+    }
+
+    @Nested
+    @DisplayName("동시성 테스트")
+    class ConcurrencyTest {
+
+        @Test
+        @DisplayName("여러 스레드에서 동시에 request해도 안전")
+        void shouldHandleConcurrentRequests() throws InterruptedException {
+            // Given
+            var elements = new Integer[100];
+            for (int i = 0; i < 100; i++) {
+                elements[i] = i + 1;
+            }
+            var publisher = new ArrayPublisher<>(elements);
+            var subscriber = new TestSubscriber<Integer>();
+
+            int threadCount = 10;
+            var latch = new CountDownLatch(threadCount);
+            var executor = Executors.newFixedThreadPool(threadCount);
+
+            // When
+            publisher.subscribe(subscriber);
+
+            for (int i = 0; i < threadCount; i++) {
+                executor.submit(() -> {
+                    try {
+                        subscriber.request(10);
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            latch.await(5, TimeUnit.SECONDS);
+            executor.shutdown();
+
+            // Then - 모든 요소가 정확히 한 번씩 전달됨
+            assertThat(subscriber.getReceivedItems()).hasSize(100);
+            assertThat(subscriber.isCompleted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Long.MAX_VALUE 요청 시 unbounded 동작")
+        void shouldHandleUnboundedRequest() {
+            // Given
+            var publisher = new ArrayPublisher<>(1, 2, 3, 4, 5);
+            var subscriber = new TestSubscriber<Integer>();
+
+            // When
+            publisher.subscribe(subscriber);
+            subscriber.request(Long.MAX_VALUE);
+
+            // Then
+            assertThat(subscriber.getReceivedItems()).containsExactly(1, 2, 3, 4, 5);
+            assertThat(subscriber.isCompleted()).isTrue();
+        }
+
+        @Test
+        @DisplayName("demand overflow 시 Long.MAX_VALUE로 처리")
+        void shouldHandleDemandOverflow() {
+            // Given
+            var publisher = new ArrayPublisher<>(1, 2, 3);
+            var subscriber = new TestSubscriber<Integer>();
+
+            // When
+            publisher.subscribe(subscriber);
+            subscriber.request(Long.MAX_VALUE - 1);
+            subscriber.request(10); // overflow 발생 → Long.MAX_VALUE로 처리
+
+            // Then - 예외 없이 정상 동작
+            assertThat(subscriber.getReceivedItems()).containsExactly(1, 2, 3);
+            assertThat(subscriber.isCompleted()).isTrue();
         }
     }
 }
