@@ -46,8 +46,17 @@ public final class EmptyPublisher<T> implements Publisher<T> {
         return (EmptyPublisher<T>) INSTANCE;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws NullPointerException Rule 1.9 - subscriber가 null인 경우
+     */
     @Override
     public void subscribe(Subscriber<? super T> subscriber) {
+        // Rule 1.9: null 체크
+        if (subscriber == null) {
+            throw new NullPointerException("Rule 1.9: Subscriber must not be null");
+        }
         subscriber.onSubscribe(new EmptySubscription(subscriber));
     }
 
