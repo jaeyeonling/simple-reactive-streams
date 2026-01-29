@@ -4,6 +4,9 @@ import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.subscription.ArraySubscription;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 /**
  * 배열의 요소를 순서대로 발행하는 Publisher.
  *
@@ -15,6 +18,10 @@ import io.simplereactive.subscription.ArraySubscription;
  * Publisher<Integer> publisher = new ArrayPublisher<>(1, 2, 3, 4, 5);
  * publisher.subscribe(subscriber);
  * }</pre>
+ *
+ * <h2>불변성</h2>
+ * <p>생성자에서 배열을 복사하여 저장하므로, 원본 배열이 변경되어도
+ * Publisher의 동작에 영향을 주지 않습니다.
  *
  * <h2>관련 규약</h2>
  * <ul>
@@ -32,12 +39,24 @@ public class ArrayPublisher<T> implements Publisher<T> {
     /**
      * 주어진 배열을 발행하는 Publisher를 생성합니다.
      *
-     * @param array 발행할 요소들
+     * <p>배열은 방어적 복사되어 저장됩니다.
+     *
+     * @param array 발행할 요소들 (null 불가, null 요소 불가)
+     * @throws NullPointerException array가 null이거나 null 요소가 포함된 경우
      */
     @SafeVarargs
     @SuppressWarnings("varargs")
     public ArrayPublisher(T... array) {
-        this.array = array;
+        Objects.requireNonNull(array, "Array must not be null");
+        this.array = Arrays.copyOf(array, array.length); // 방어적 복사
+        
+        // null 요소 검증 (Rule 2.13 준수를 위해 생성 시점에 검증)
+        for (int i = 0; i < this.array.length; i++) {
+            if (this.array[i] == null) {
+                throw new NullPointerException(
+                        "Array element at index " + i + " must not be null");
+            }
+        }
     }
 
     /**

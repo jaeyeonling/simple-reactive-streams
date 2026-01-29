@@ -37,7 +37,7 @@ public class ArraySubscription<T> extends BaseSubscription<T> {
      * 요청된 만큼 배열 요소를 발행합니다.
      */
     @Override
-    protected void onRequest() {
+    protected void doOnRequest() {
         while (hasDemand() && index < array.length) {
             if (isCancelled()) {
                 return;

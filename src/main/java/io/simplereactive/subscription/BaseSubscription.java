@@ -4,6 +4,7 @@ import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -20,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *     }
  *
  *     @Override
- *     protected void onRequest() {
+ *     protected void doOnRequest() {
  *         while (hasDemand() && hasMoreData()) {
  *             emit(nextData());
  *         }
@@ -33,7 +34,16 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <h2>스레드 안전성</h2>
  * <p>이 클래스는 스레드 안전합니다. demand와 cancelled 상태는
- * Atomic 연산으로 관리됩니다.
+ * Atomic 연산으로 관리되며, WIP(Work-In-Progress) 카운터를 통해
+ * 재진입(reentrancy) 문제를 방지합니다.
+ *
+ * <h2>관련 규약</h2>
+ * <ul>
+ *   <li>Rule 1.3: onSubscribe, onNext, onError, onComplete는 직렬화되어야 한다</li>
+ *   <li>Rule 2.13: onNext는 null을 전달하면 안 된다</li>
+ *   <li>Rule 3.5: cancel은 멱등성을 가져야 한다</li>
+ *   <li>Rule 3.9: request(n)에서 n <= 0이면 onError를 호출해야 한다</li>
+ * </ul>
  *
  * @param <T> 발행할 요소의 타입
  */
@@ -43,14 +53,27 @@ public abstract class BaseSubscription<T> implements Subscription {
 
     private final AtomicLong requested = new AtomicLong(0);
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
-    private final AtomicBoolean completed = new AtomicBoolean(false);
+    private final AtomicBoolean terminated = new AtomicBoolean(false);
+
+    /**
+     * WIP(Work-In-Progress) 카운터.
+     * 
+     * <p>재진입(reentrancy) 문제를 방지하기 위해 사용됩니다.
+     * 여러 스레드에서 동시에 request()를 호출해도 drain 로직은
+     * 한 번에 하나의 스레드에서만 실행됩니다.
+     */
+    private final AtomicInteger wip = new AtomicInteger(0);
 
     /**
      * BaseSubscription을 생성합니다.
      *
-     * @param subscriber 데이터를 받을 Subscriber
+     * @param subscriber 데이터를 받을 Subscriber (null 불가)
+     * @throws NullPointerException subscriber가 null인 경우
      */
     protected BaseSubscription(Subscriber<? super T> subscriber) {
+        if (subscriber == null) {
+            throw new NullPointerException("Subscriber must not be null");
+        }
         this.subscriber = subscriber;
     }
 
@@ -58,7 +81,10 @@ public abstract class BaseSubscription<T> implements Subscription {
      * {@inheritDoc}
      *
      * <p>n개의 데이터를 요청합니다. 요청량은 누적되며,
-     * {@link #onRequest()}를 호출하여 데이터 발행을 시작합니다.
+     * {@link #doOnRequest()}를 호출하여 데이터 발행을 시작합니다.
+     *
+     * <p>여러 스레드에서 동시에 호출되어도 안전합니다.
+     * WIP 카운터를 통해 실제 발행 로직은 직렬화됩니다 (Rule 1.3).
      *
      * @throws IllegalArgumentException Rule 3.9 - n이 0 이하인 경우 (onError로 전달)
      */
@@ -71,23 +97,22 @@ public abstract class BaseSubscription<T> implements Subscription {
             return;
         }
 
-        if (isCancelled() || isCompleted()) {
+        if (isTerminated()) {
             return;
         }
 
         addDemand(n);
-        onRequest();
+        drain();
     }
 
     /**
      * {@inheritDoc}
      *
      * <p>구독을 취소합니다. 취소 후에는 더 이상 시그널이 발생하지 않습니다.
-     * 이 메서드는 멱등성을 가집니다 (여러 번 호출해도 안전).
+     * 이 메서드는 멱등성을 가집니다 (Rule 3.5).
      */
     @Override
     public final void cancel() {
-        // Rule 3.5: cancel은 멱등성을 가져야 함
         cancelled.set(true);
     }
 
@@ -96,8 +121,11 @@ public abstract class BaseSubscription<T> implements Subscription {
      *
      * <p>하위 클래스는 이 메서드에서 {@link #hasDemand()}, {@link #emit(Object)},
      * {@link #complete()} 등을 사용하여 데이터를 발행해야 합니다.
+     *
+     * <p>이 메서드는 WIP 카운터에 의해 직렬화되어 호출됩니다.
+     * 동시에 여러 스레드에서 호출되지 않습니다.
      */
-    protected abstract void onRequest();
+    protected abstract void doOnRequest();
 
     // ========== 하위 클래스용 유틸리티 메서드 ==========
 
@@ -129,25 +157,25 @@ public abstract class BaseSubscription<T> implements Subscription {
     }
 
     /**
-     * 완료되었는지 확인합니다.
+     * 종료되었는지 확인합니다 (완료 또는 에러).
      *
-     * @return 완료되었으면 true
+     * @return 종료되었으면 true
      */
-    protected final boolean isCompleted() {
-        return completed.get();
+    protected final boolean isTerminated() {
+        return terminated.get();
     }
 
     /**
      * 데이터를 발행합니다.
      *
-     * <p>취소되었거나 완료된 경우 무시됩니다.
-     * null을 발행하면 onError가 호출됩니다.
+     * <p>취소되었거나 종료된 경우 무시됩니다.
+     * null을 발행하면 onError가 호출됩니다 (Rule 2.13).
      *
      * @param item 발행할 데이터
-     * @return 발행 성공 시 true, 취소/완료/에러 시 false
+     * @return 발행 성공 시 true, 취소/종료/에러 시 false
      */
     protected final boolean emit(T item) {
-        if (isCancelled() || isCompleted()) {
+        if (isCancelled() || isTerminated()) {
             return false;
         }
 
@@ -166,14 +194,15 @@ public abstract class BaseSubscription<T> implements Subscription {
     /**
      * 스트림을 완료합니다.
      *
-     * <p>취소되었거나 이미 완료된 경우 무시됩니다.
+     * <p>취소되었거나 이미 종료된 경우 무시됩니다 (Rule 1.3).
      * 한 번만 호출됩니다.
      */
     protected final void complete() {
         if (isCancelled()) {
             return;
         }
-        if (completed.compareAndSet(false, true)) {
+        // Rule 1.3: onComplete는 한 번만 호출
+        if (terminated.compareAndSet(false, true)) {
             subscriber.onComplete();
         }
     }
@@ -181,7 +210,7 @@ public abstract class BaseSubscription<T> implements Subscription {
     /**
      * 에러를 발생시킵니다.
      *
-     * <p>취소되었거나 이미 완료된 경우 무시됩니다.
+     * <p>취소되었거나 이미 종료된 경우 무시됩니다 (Rule 1.3).
      *
      * @param error 발생한 에러
      */
@@ -189,12 +218,35 @@ public abstract class BaseSubscription<T> implements Subscription {
         if (isCancelled()) {
             return;
         }
-        if (completed.compareAndSet(false, true)) {
+        // Rule 1.3: onError는 한 번만 호출
+        if (terminated.compareAndSet(false, true)) {
             subscriber.onError(error);
         }
     }
 
     // ========== private 메서드 ==========
+
+    /**
+     * WIP 카운터를 사용하여 drain 로직을 직렬화합니다.
+     *
+     * <p>여러 스레드에서 동시에 request()가 호출되어도
+     * 실제 발행 로직(doOnRequest)은 한 번에 하나의 스레드에서만 실행됩니다.
+     */
+    private void drain() {
+        // WIP 카운터 증가, 이미 실행 중이면 리턴
+        if (wip.getAndIncrement() != 0) {
+            return;
+        }
+
+        // drain 루프 - missed request 처리
+        int missed = 1;
+        do {
+            if (isCancelled() || isTerminated()) {
+                return;
+            }
+            doOnRequest();
+        } while ((missed = wip.addAndGet(-missed)) != 0);
+    }
 
     /**
      * demand를 추가합니다 (overflow 방지).
