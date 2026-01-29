@@ -2,9 +2,12 @@ package io.simplereactive.core;
 
 import io.simplereactive.operator.FilterOperator;
 import io.simplereactive.operator.MapOperator;
+import io.simplereactive.operator.OnErrorResumeOperator;
+import io.simplereactive.operator.OnErrorReturnOperator;
 import io.simplereactive.operator.TakeOperator;
 import io.simplereactive.publisher.ArrayPublisher;
 import io.simplereactive.publisher.EmptyPublisher;
+import io.simplereactive.publisher.ErrorPublisher;
 import io.simplereactive.publisher.RangePublisher;
 
 import java.util.Objects;
@@ -50,6 +53,8 @@ import java.util.function.Predicate;
  * @see MapOperator
  * @see FilterOperator
  * @see TakeOperator
+ * @see OnErrorResumeOperator
+ * @see OnErrorReturnOperator
  */
 public class Flux<T> implements Publisher<T> {
 
@@ -128,6 +133,24 @@ public class Flux<T> implements Publisher<T> {
         return new Flux<>(new RangePublisher(start, count));
     }
 
+    /**
+     * 즉시 에러를 발행하는 Flux를 생성합니다.
+     *
+     * <p>구독 시 즉시 onError를 호출합니다.
+     *
+     * <pre>
+     * ──✗  (즉시 에러)
+     * </pre>
+     *
+     * @param error 발행할 에러
+     * @param <T> 요소 타입
+     * @return 에러 Flux
+     * @see ErrorPublisher
+     */
+    public static <T> Flux<T> error(Throwable error) {
+        return new Flux<>(new ErrorPublisher<>(error));
+    }
+
     // ========== Operator 메서드 ==========
 
     /**
@@ -186,6 +209,65 @@ public class Flux<T> implements Publisher<T> {
      */
     public Flux<T> take(long n) {
         return new Flux<>(new TakeOperator<>(this, n));
+    }
+
+    // ========== 에러 처리 메서드 ==========
+
+    /**
+     * 에러 발생 시 대체 Publisher로 전환합니다.
+     *
+     * <pre>
+     * ──1──2──✗
+     *        │
+     *   onErrorResume(e -> fallback)
+     *        │
+     * ──1──2──3──4──|
+     * </pre>
+     *
+     * @param fallback 에러 발생 시 대체 Publisher를 반환하는 함수
+     * @return 에러 복구 Flux
+     * @see OnErrorResumeOperator
+     */
+    public Flux<T> onErrorResume(Function<? super Throwable, ? extends Publisher<T>> fallback) {
+        return new Flux<>(new OnErrorResumeOperator<>(this, fallback));
+    }
+
+    /**
+     * 에러 발생 시 기본값을 반환합니다.
+     *
+     * <pre>
+     * ──1──2──✗
+     *        │
+     *   onErrorReturn(e -> -1)
+     *        │
+     * ──1──2──(-1)──|
+     * </pre>
+     *
+     * @param fallback 에러 발생 시 기본값을 반환하는 함수
+     * @return 에러 복구 Flux
+     * @see OnErrorReturnOperator
+     */
+    public Flux<T> onErrorReturn(Function<? super Throwable, ? extends T> fallback) {
+        return new Flux<>(new OnErrorReturnOperator<>(this, fallback));
+    }
+
+    /**
+     * 에러 발생 시 고정 기본값을 반환합니다.
+     *
+     * <pre>
+     * ──1──2──✗
+     *        │
+     *   onErrorReturn(-1)
+     *        │
+     * ──1──2──(-1)──|
+     * </pre>
+     *
+     * @param defaultValue 에러 발생 시 반환할 기본값
+     * @return 에러 복구 Flux
+     * @see OnErrorReturnOperator
+     */
+    public Flux<T> onErrorReturn(T defaultValue) {
+        return new Flux<>(new OnErrorReturnOperator<>(this, defaultValue));
     }
 
     // ========== Publisher 구현 ==========
