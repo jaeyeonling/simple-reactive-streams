@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -41,11 +42,18 @@ import java.util.concurrent.atomic.AtomicReference;
  * hot.connect();
  * }</pre>
  *
- * <h2>autoConnect vs refCount</h2>
+ * <h2>autoConnect</h2>
  * <ul>
+ *   <li>autoConnect(): 첫 구독자 등록 시 자동 연결</li>
  *   <li>autoConnect(n): n명 구독 시 자동 연결</li>
- *   <li>refCount(): 첫 구독자 시 연결, 마지막 구독자 취소 시 연결 해제</li>
  * </ul>
+ *
+ * <p><strong>Warning:</strong> autoConnect(0) 호출 시 즉시 연결됩니다.
+ * 구독자가 없는 상태에서 연결하면 데이터가 유실될 수 있습니다.
+ *
+ * <h2>Backpressure 미지원</h2>
+ * <p>ConnectableFlux는 Backpressure를 지원하지 않습니다.
+ * upstream에 Long.MAX_VALUE를 요청하고, 모든 데이터를 구독자에게 브로드캐스트합니다.
  *
  * @param <T> 요소 타입
  * @see Flux#publish()
@@ -54,11 +62,12 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ConnectableFlux<T> implements Publisher<T> {
 
     private final Publisher<T> upstream;
-    private final List<Subscriber<? super T>> subscribers = new CopyOnWriteArrayList<>();
+    private final List<ConnectableSubscription<T>> subscriptions = new CopyOnWriteArrayList<>();
     
     private final AtomicBoolean connected = new AtomicBoolean(false);
     private final AtomicBoolean completed = new AtomicBoolean(false);
     private final AtomicReference<Subscription> upstreamSubscription = new AtomicReference<>();
+    private final AtomicReference<Disposable> disposable = new AtomicReference<>();
     
     // error를 먼저 설정하고 completed를 나중에 설정 (메모리 가시성)
     private volatile Throwable error;
@@ -67,6 +76,7 @@ public class ConnectableFlux<T> implements Publisher<T> {
      * ConnectableFlux를 생성합니다.
      *
      * @param upstream 원본 Cold Publisher
+     * @throws NullPointerException upstream이 null인 경우
      */
     public ConnectableFlux(Publisher<T> upstream) {
         this.upstream = Objects.requireNonNull(upstream, "Upstream must not be null");
@@ -84,8 +94,14 @@ public class ConnectableFlux<T> implements Publisher<T> {
     public void subscribe(Subscriber<? super T> subscriber) {
         Objects.requireNonNull(subscriber, "Rule 1.9: Subscriber must not be null");
 
+        ConnectableSubscription<T> subscription = new ConnectableSubscription<>(subscriber, this);
+        
+        // 먼저 리스트에 추가
+        subscriptions.add(subscription);
+        
+        // completed 체크 - 이미 완료되었으면 즉시 종료 시그널
         if (completed.get()) {
-            // 이미 완료된 경우 - 즉시 종료 시그널
+            subscriptions.remove(subscription);
             subscriber.onSubscribe(new EmptySubscription());
             Throwable ex = error;
             if (ex != null) {
@@ -95,30 +111,31 @@ public class ConnectableFlux<T> implements Publisher<T> {
             }
             return;
         }
-
-        ConnectableSubscription<T> subscription = new ConnectableSubscription<>(subscriber, this);
-        subscribers.add(subscriber);
+        
+        // Rule 1.1: onSubscribe 호출
         subscriber.onSubscribe(subscription);
     }
 
     /**
      * upstream에 연결하여 데이터 발행을 시작합니다.
      *
-     * <p>한 번만 호출할 수 있습니다. 이미 연결된 경우 무시됩니다.
+     * <p>한 번만 호출할 수 있습니다. 중복 호출 시 동일한 Disposable을 반환합니다.
      * 연결 후 모든 구독자에게 데이터가 발행됩니다.
      *
-     * @return 연결 해제를 위한 Disposable (cancel 호출용)
+     * @return 연결 해제를 위한 Disposable (dispose 호출로 upstream 취소)
      */
     public Disposable connect() {
         if (connected.compareAndSet(false, true)) {
             upstream.subscribe(new InnerSubscriber());
+            Disposable d = () -> {
+                Subscription s = upstreamSubscription.get();
+                if (s != null) {
+                    s.cancel();
+                }
+            };
+            disposable.set(d);
         }
-        return () -> {
-            Subscription s = upstreamSubscription.get();
-            if (s != null) {
-                s.cancel();
-            }
-        };
+        return disposable.get();
     }
 
     /**
@@ -133,7 +150,10 @@ public class ConnectableFlux<T> implements Publisher<T> {
     /**
      * n명의 구독자가 등록될 때 자동으로 연결하는 Flux를 반환합니다.
      *
-     * @param minSubscribers 연결을 시작할 최소 구독자 수
+     * <p><strong>Warning:</strong> minSubscribers가 0 이하면 즉시 연결됩니다.
+     * 구독자가 없는 상태에서 연결하면 데이터가 유실될 수 있습니다.
+     *
+     * @param minSubscribers 연결을 시작할 최소 구독자 수 (0 이하면 즉시 연결)
      * @return 자동 연결 Flux
      */
     public Flux<T> autoConnect(int minSubscribers) {
@@ -147,8 +167,8 @@ public class ConnectableFlux<T> implements Publisher<T> {
     /**
      * 구독을 제거합니다.
      */
-    void removeSubscriber(Subscriber<? super T> subscriber) {
-        subscribers.remove(subscriber);
+    void removeSubscription(ConnectableSubscription<T> subscription) {
+        subscriptions.remove(subscription);
     }
 
     /**
@@ -168,8 +188,15 @@ public class ConnectableFlux<T> implements Publisher<T> {
 
         @Override
         public void onNext(T item) {
-            for (Subscriber<? super T> subscriber : subscribers) {
-                subscriber.onNext(item);
+            for (ConnectableSubscription<T> subscription : subscriptions) {
+                if (!subscription.isCancelled()) {
+                    try {
+                        subscription.subscriber.onNext(item);
+                    } catch (Throwable t) {
+                        // Rule 2.13: Subscriber가 예외를 던지면 해당 구독 취소
+                        subscription.cancel();
+                    }
+                }
             }
         }
 
@@ -177,20 +204,32 @@ public class ConnectableFlux<T> implements Publisher<T> {
         public void onError(Throwable t) {
             if (completed.compareAndSet(false, true)) {
                 error = t;
-                for (Subscriber<? super T> subscriber : subscribers) {
-                    subscriber.onError(t);
+                for (ConnectableSubscription<T> subscription : subscriptions) {
+                    if (!subscription.isCancelled()) {
+                        try {
+                            subscription.subscriber.onError(t);
+                        } catch (Throwable ignored) {
+                            // Rule 2.13: onError에서 예외 발생 시 무시
+                        }
+                    }
                 }
-                subscribers.clear();
+                subscriptions.clear();
             }
         }
 
         @Override
         public void onComplete() {
             if (completed.compareAndSet(false, true)) {
-                for (Subscriber<? super T> subscriber : subscribers) {
-                    subscriber.onComplete();
+                for (ConnectableSubscription<T> subscription : subscriptions) {
+                    if (!subscription.isCancelled()) {
+                        try {
+                            subscription.subscriber.onComplete();
+                        } catch (Throwable ignored) {
+                            // Rule 2.13: onComplete에서 예외 발생 시 무시
+                        }
+                    }
                 }
-                subscribers.clear();
+                subscriptions.clear();
             }
         }
     }
@@ -200,17 +239,24 @@ public class ConnectableFlux<T> implements Publisher<T> {
      */
     @FunctionalInterface
     public interface Disposable {
+        /**
+         * 연결을 해제합니다.
+         * 
+         * <p>upstream의 Subscription.cancel()을 호출합니다.
+         */
         void dispose();
     }
 
     /**
      * 자동 연결을 위한 Publisher 래퍼.
+     * 
+     * <p>스레드 안전성을 위해 AtomicInteger/AtomicBoolean을 사용합니다.
      */
     private static class AutoConnectPublisher<T> implements Publisher<T> {
         private final ConnectableFlux<T> source;
         private final int minSubscribers;
-        private int currentSubscribers = 0;
-        private boolean connected = false;
+        private final AtomicInteger currentSubscribers = new AtomicInteger(0);
+        private final AtomicBoolean connected = new AtomicBoolean(false);
 
         AutoConnectPublisher(ConnectableFlux<T> source, int minSubscribers) {
             this.source = source;
@@ -218,11 +264,12 @@ public class ConnectableFlux<T> implements Publisher<T> {
         }
 
         @Override
-        public synchronized void subscribe(Subscriber<? super T> subscriber) {
+        public void subscribe(Subscriber<? super T> subscriber) {
             source.subscribe(subscriber);
-            currentSubscribers++;
-            if (!connected && currentSubscribers >= minSubscribers) {
-                connected = true;
+            
+            // 구독 후 연결 여부 결정 (스레드 안전)
+            int count = currentSubscribers.incrementAndGet();
+            if (count >= minSubscribers && connected.compareAndSet(false, true)) {
                 source.connect();
             }
         }
@@ -230,9 +277,12 @@ public class ConnectableFlux<T> implements Publisher<T> {
 
     /**
      * ConnectableFlux용 Subscription.
+     * 
+     * <p>Backpressure를 지원하지 않으며 (브로드캐스트 모드),
+     * cancel 호출 시 구독자 리스트에서 제거됩니다.
      */
     private static class ConnectableSubscription<T> implements Subscription {
-        private final Subscriber<? super T> subscriber;
+        final Subscriber<? super T> subscriber;
         private final ConnectableFlux<T> parent;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
@@ -249,8 +299,12 @@ public class ConnectableFlux<T> implements Publisher<T> {
         @Override
         public void cancel() {
             if (cancelled.compareAndSet(false, true)) {
-                parent.removeSubscriber(subscriber);
+                parent.removeSubscription(this);
             }
+        }
+        
+        boolean isCancelled() {
+            return cancelled.get();
         }
     }
 
