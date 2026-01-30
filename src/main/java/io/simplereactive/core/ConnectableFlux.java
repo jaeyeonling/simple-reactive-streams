@@ -1,5 +1,7 @@
 package io.simplereactive.core;
 
+import io.simplereactive.subscription.Subscriptions;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -102,7 +104,7 @@ public class ConnectableFlux<T> implements Publisher<T> {
         // completed 체크 - 이미 완료되었으면 즉시 종료 시그널
         if (completed.get()) {
             subscriptions.remove(subscription);
-            subscriber.onSubscribe(new EmptySubscription());
+            subscriber.onSubscribe(Subscriptions.empty());
             Throwable ex = error;
             if (ex != null) {
                 subscriber.onError(ex);
@@ -306,15 +308,5 @@ public class ConnectableFlux<T> implements Publisher<T> {
         boolean isCancelled() {
             return cancelled.get();
         }
-    }
-
-    /**
-     * 빈 Subscription.
-     */
-    private static class EmptySubscription implements Subscription {
-        @Override
-        public void request(long n) {}
-        @Override
-        public void cancel() {}
     }
 }

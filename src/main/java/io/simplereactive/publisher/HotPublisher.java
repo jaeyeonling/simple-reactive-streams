@@ -3,6 +3,7 @@ package io.simplereactive.publisher;
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
+import io.simplereactive.subscription.Subscriptions;
 
 import java.util.List;
 import java.util.Objects;
@@ -116,7 +117,7 @@ public class HotPublisher<T> implements Publisher<T> {
         // completed 체크 - 이미 완료되었으면 즉시 종료 시그널
         if (completed.get()) {
             subscriptions.remove(subscription);
-            subscriber.onSubscribe(new EmptySubscription());
+            subscriber.onSubscribe(Subscriptions.empty());
             Throwable ex = error;
             if (ex != null) {
                 subscriber.onError(ex);
@@ -282,21 +283,6 @@ public class HotPublisher<T> implements Publisher<T> {
 
         boolean isCancelled() {
             return cancelled.get();
-        }
-    }
-
-    /**
-     * 완료된 Publisher에 구독할 때 사용되는 빈 Subscription.
-     */
-    private static final class EmptySubscription implements Subscription {
-        @Override
-        public void request(long n) {
-            // 이미 완료되었으므로 무시
-        }
-
-        @Override
-        public void cancel() {
-            // 이미 완료되었으므로 무시
         }
     }
 }
