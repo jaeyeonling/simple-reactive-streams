@@ -16,7 +16,6 @@ import io.simplereactive.publisher.RangePublisher;
 import io.simplereactive.scheduler.Scheduler;
 
 import java.util.Objects;
-import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
