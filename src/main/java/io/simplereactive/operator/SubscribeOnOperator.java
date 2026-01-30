@@ -6,6 +6,9 @@ import io.simplereactive.core.Subscription;
 import io.simplereactive.scheduler.Scheduler;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 구독 시점의 스레드를 변경하는 Operator.
@@ -90,25 +93,50 @@ public final class SubscribeOnOperator<T> implements Publisher<T> {
     public void subscribe(Subscriber<? super T> subscriber) {
         Objects.requireNonNull(subscriber, "Rule 1.9: Subscriber must not be null");
 
+        // downstream에 먼저 subscription 전달 (request 버퍼링 지원)
+        SubscribeOnSubscriber<T> subscribeOnSubscriber = new SubscribeOnSubscriber<>(subscriber);
+        subscriber.onSubscribe(subscribeOnSubscriber);
+        
         // Scheduler에서 구독 실행
-        scheduler.schedule(() -> upstream.subscribe(new SubscribeOnSubscriber<>(subscriber)));
+        scheduler.schedule(() -> upstream.subscribe(subscribeOnSubscriber));
     }
 
     /**
      * 시그널을 전달하는 Subscriber.
      *
-     * <p>AbstractOperatorSubscriber를 상속하여 다음을 보장합니다:
-     * <ul>
-     *   <li>스레드 안전한 upstream 관리 (AtomicReference)</li>
-     *   <li>중복 onSubscribe 방지 (Rule 2.12)</li>
-     *   <li>종료 후 시그널 차단 (Rule 1.7)</li>
-     *   <li>null 체크 (Rule 2.13)</li>
-     * </ul>
+     * <p>비동기 구독을 지원하기 위해 request를 버퍼링합니다.
+     * upstream.subscribe()가 비동기로 실행되므로,
+     * downstream의 request()가 먼저 호출될 수 있습니다.
      */
-    private static final class SubscribeOnSubscriber<T> extends AbstractOperatorSubscriber<T, T> {
+    private static final class SubscribeOnSubscriber<T> implements Subscriber<T>, Subscription {
+
+        private final Subscriber<? super T> downstream;
+        private final AtomicReference<Subscription> upstream = new AtomicReference<>();
+        private final AtomicLong pendingRequests = new AtomicLong(0);
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final AtomicBoolean done = new AtomicBoolean(false);
 
         SubscribeOnSubscriber(Subscriber<? super T> downstream) {
-            super(downstream);
+            this.downstream = downstream;
+        }
+
+        @Override
+        public void onSubscribe(Subscription s) {
+            if (upstream.compareAndSet(null, s)) {
+                // 취소되었으면 upstream도 취소
+                if (cancelled.get()) {
+                    s.cancel();
+                    return;
+                }
+                
+                // 버퍼링된 request가 있으면 upstream에 전달
+                long pending = pendingRequests.getAndSet(0);
+                if (pending > 0) {
+                    s.request(pending);
+                }
+            } else {
+                s.cancel();
+            }
         }
 
         @Override
@@ -120,7 +148,7 @@ public final class SubscribeOnOperator<T> implements Publisher<T> {
                 return;
             }
             
-            if (isDone()) {
+            if (done.get()) {
                 return;
             }
             
@@ -134,16 +162,72 @@ public final class SubscribeOnOperator<T> implements Publisher<T> {
                 t = new NullPointerException("Rule 2.13: onError throwable must not be null");
             }
             
-            if (markDone()) {
+            if (done.compareAndSet(false, true)) {
                 downstream.onError(t);
             }
         }
 
         @Override
         public void onComplete() {
-            if (markDone()) {
+            if (done.compareAndSet(false, true)) {
                 downstream.onComplete();
             }
+        }
+
+        @Override
+        public void request(long n) {
+            if (n <= 0) {
+                cancel();
+                if (done.compareAndSet(false, true)) {
+                    downstream.onError(new IllegalArgumentException(
+                            "Rule 3.9: request amount must be positive, but was " + n));
+                }
+                return;
+            }
+            
+            Subscription s = upstream.get();
+            if (s != null) {
+                s.request(n);
+            } else {
+                // upstream이 아직 설정되지 않았으면 버퍼링
+                addPendingRequests(n);
+                
+                // 다시 확인 - race condition 방지
+                s = upstream.get();
+                if (s != null) {
+                    long pending = pendingRequests.getAndSet(0);
+                    if (pending > 0) {
+                        s.request(pending);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void cancel() {
+            if (cancelled.compareAndSet(false, true)) {
+                Subscription s = upstream.get();
+                if (s != null) {
+                    s.cancel();
+                }
+            }
+        }
+        
+        private void cancelUpstream() {
+            Subscription s = upstream.get();
+            if (s != null) {
+                s.cancel();
+            }
+        }
+        
+        private void addPendingRequests(long n) {
+            pendingRequests.getAndUpdate(current -> {
+                if (current == Long.MAX_VALUE) {
+                    return Long.MAX_VALUE;
+                }
+                long next = current + n;
+                return next < 0 ? Long.MAX_VALUE : next;
+            });
         }
     }
 }

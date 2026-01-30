@@ -5,6 +5,7 @@ import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -19,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>스레드 안전한 {@code upstream} 관리 (AtomicReference)</li>
  *   <li>중복 onSubscribe 호출 방지 (Rule 2.12)</li>
  *   <li>cancel 시 done 플래그 설정</li>
- *   <li>request 위임</li>
+ *   <li>request 위임 및 버퍼링 (비동기 구독 지원)</li>
  * </ul>
  *
  * <h2>사용 방법</h2>
@@ -84,6 +85,13 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
     private final AtomicReference<Subscription> upstream = new AtomicReference<>();
 
     /**
+     * 아직 upstream에 전달되지 않은 요청량.
+     * <p>비동기 구독(subscribeOn) 시 upstream이 설정되기 전에
+     * request가 호출될 수 있어 이를 버퍼링합니다.
+     */
+    private final AtomicLong pendingRequests = new AtomicLong(0);
+
+    /**
      * AbstractOperatorSubscriber를 생성합니다.
      *
      * @param downstream 실제 데이터를 받을 Subscriber
@@ -99,6 +107,7 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
      * upstream에서 Subscription을 받으면 downstream에 전달합니다.
      *
      * <p>중복 호출 시 두 번째 Subscription은 즉시 cancel됩니다. (Rule 2.12)
+     * 버퍼링된 request가 있으면 upstream에 전달합니다.
      *
      * @param s upstream Subscription
      */
@@ -108,6 +117,12 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
         if (upstream.compareAndSet(null, s)) {
             // 자신(this)을 Subscription으로 전달하여 request/cancel 중개
             downstream.onSubscribe(this);
+            
+            // 버퍼링된 request가 있으면 upstream에 전달
+            long pending = pendingRequests.getAndSet(0);
+            if (pending > 0) {
+                s.request(pending);
+            }
         } else {
             // 이미 구독된 상태면 새 Subscription은 cancel
             s.cancel();
@@ -119,7 +134,8 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
     /**
      * downstream의 request를 upstream으로 전달합니다.
      *
-     * <p>Rule 3.9에 따라 n <= 0인 경우 onError를 시그널합니다.
+     * <p>upstream이 아직 설정되지 않았다면 요청량을 버퍼링합니다.
+     * Rule 3.9에 따라 n <= 0인 경우 onError를 시그널합니다.
      *
      * @param n 요청할 데이터 개수
      */
@@ -138,6 +154,19 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
         Subscription s = upstream.get();
         if (s != null) {
             s.request(n);
+        } else {
+            // upstream이 아직 설정되지 않았으면 버퍼링
+            // 비동기 구독(subscribeOn) 시 발생할 수 있음
+            addPendingRequests(n);
+            
+            // 다시 확인 - race condition 방지
+            s = upstream.get();
+            if (s != null) {
+                long pending = pendingRequests.getAndSet(0);
+                if (pending > 0) {
+                    s.request(pending);
+                }
+            }
         }
     }
 
@@ -202,5 +231,18 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
         if (s != null) {
             s.cancel();
         }
+    }
+
+    /**
+     * 요청량을 버퍼에 추가합니다 (overflow 방지).
+     */
+    private void addPendingRequests(long n) {
+        pendingRequests.getAndUpdate(current -> {
+            if (current == Long.MAX_VALUE) {
+                return Long.MAX_VALUE;
+            }
+            long next = current + n;
+            return next < 0 ? Long.MAX_VALUE : next;
+        });
     }
 }

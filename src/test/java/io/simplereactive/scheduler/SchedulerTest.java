@@ -206,11 +206,11 @@ class SchedulerTest {
     class SubscribeOnTest {
 
         @Test
-        @DisplayName("구독이 Scheduler에서 실행됨")
-        void subscriptionHappensOnScheduler() throws InterruptedException {
+        @DisplayName("데이터가 Scheduler에서 발행됨")
+        void dataEmittedOnScheduler() throws InterruptedException {
             Scheduler scheduler = Schedulers.newSingle();
             CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<String> subscribeThread = new AtomicReference<>();
+            AtomicReference<String> dataThread = new AtomicReference<>();
 
             try {
                 Flux.range(1, 3)
@@ -218,9 +218,14 @@ class SchedulerTest {
                         .subscribe(new TestSubscriber<Integer>() {
                             @Override
                             public void onSubscribe(io.simplereactive.core.Subscription s) {
-                                subscribeThread.set(Thread.currentThread().getName());
                                 super.onSubscribe(s);
                                 s.request(Long.MAX_VALUE);
+                            }
+
+                            @Override
+                            public void onNext(Integer item) {
+                                dataThread.set(Thread.currentThread().getName());
+                                super.onNext(item);
                             }
 
                             @Override
@@ -232,7 +237,8 @@ class SchedulerTest {
 
                 latch.await(1, TimeUnit.SECONDS);
 
-                assertThat(subscribeThread.get()).startsWith("single-");
+                // 데이터는 Scheduler 스레드에서 발행됨
+                assertThat(dataThread.get()).startsWith("single-");
             } finally {
                 scheduler.dispose();
             }
