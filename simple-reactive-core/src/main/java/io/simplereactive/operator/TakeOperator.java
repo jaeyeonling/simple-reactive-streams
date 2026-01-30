@@ -3,7 +3,6 @@ package io.simplereactive.operator;
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**

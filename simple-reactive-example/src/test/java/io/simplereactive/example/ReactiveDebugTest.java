@@ -1,7 +1,7 @@
 package io.simplereactive.example;
 
-import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Flux;
+import io.simplereactive.core.Publisher;
 import io.simplereactive.operator.ZipOperator;
 import io.simplereactive.publisher.DeferPublisher;
 import io.simplereactive.scheduler.Scheduler;
@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Reactive 조합 디버그 테스트.
