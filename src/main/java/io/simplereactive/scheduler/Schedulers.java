@@ -1,5 +1,7 @@
 package io.simplereactive.scheduler;
 
+import java.util.function.Supplier;
+
 /**
  * 다양한 Scheduler 인스턴스를 제공하는 팩토리 클래스.
  *
@@ -42,13 +44,15 @@ public final class Schedulers {
     }
 
     // ========== 싱글톤 인스턴스 ==========
-    
+
     // Immediate: eager 초기화 - 리소스(스레드) 없음, 가볍고 항상 사용됨
     private static final Scheduler IMMEDIATE = new ImmediateScheduler();
-    
+
     // Single/Parallel: lazy 초기화 - 스레드 생성 비용이 있어 실제 사용 시점에 초기화
-    private static volatile Scheduler SINGLE;
-    private static volatile Scheduler PARALLEL;
+    private static final CachedScheduler SINGLE = new CachedScheduler(SingleThreadScheduler::new);
+    private static final CachedScheduler PARALLEL = new CachedScheduler(ParallelScheduler::new);
+
+    // ========== 공유 인스턴스 접근 ==========
 
     /**
      * 현재 스레드에서 즉시 작업을 실행하는 Scheduler를 반환합니다.
@@ -85,17 +89,7 @@ public final class Schedulers {
      * @return SingleThreadScheduler 인스턴스
      */
     public static Scheduler single() {
-        Scheduler s = SINGLE;
-        if (s == null) {
-            synchronized (Schedulers.class) {
-                s = SINGLE;
-                if (s == null) {
-                    s = new SingleThreadScheduler();
-                    SINGLE = s;
-                }
-            }
-        }
-        return s;
+        return SINGLE.get();
     }
 
     /**
@@ -114,18 +108,10 @@ public final class Schedulers {
      * @return ParallelScheduler 인스턴스
      */
     public static Scheduler parallel() {
-        Scheduler s = PARALLEL;
-        if (s == null) {
-            synchronized (Schedulers.class) {
-                s = PARALLEL;
-                if (s == null) {
-                    s = new ParallelScheduler();
-                    PARALLEL = s;
-                }
-            }
-        }
-        return s;
+        return PARALLEL.get();
     }
+
+    // ========== 새 인스턴스 생성 ==========
 
     /**
      * 새로운 단일 스레드 Scheduler를 생성합니다.
@@ -162,6 +148,8 @@ public final class Schedulers {
         return new ParallelScheduler(parallelism);
     }
 
+    // ========== 리소스 정리 ==========
+
     /**
      * 모든 공유 Scheduler를 dispose합니다.
      *
@@ -169,16 +157,50 @@ public final class Schedulers {
      * 테스트 후 정리 용도로도 사용할 수 있습니다.
      */
     public static void shutdownAll() {
-        Scheduler s = SINGLE;
-        if (s != null) {
-            s.dispose();
-            SINGLE = null;
+        SINGLE.dispose();
+        PARALLEL.dispose();
+    }
+
+    // ========== 내부 헬퍼 ==========
+
+    /**
+     * 스레드 안전한 lazy 초기화와 dispose를 지원하는 Scheduler 캐시.
+     *
+     * <p>DCL(Double-Checked Locking) 패턴을 캡슐화하여 중복 코드를 제거합니다.
+     */
+    private static final class CachedScheduler {
+        private final Supplier<Scheduler> factory;
+        private volatile Scheduler instance;
+
+        CachedScheduler(Supplier<Scheduler> factory) {
+            this.factory = factory;
         }
 
-        Scheduler p = PARALLEL;
-        if (p != null) {
-            p.dispose();
-            PARALLEL = null;
+        Scheduler get() {
+            Scheduler s = instance;
+            if (s == null) {
+                synchronized (this) {
+                    s = instance;
+                    if (s == null) {
+                        s = factory.get();
+                        instance = s;
+                    }
+                }
+            }
+            return s;
+        }
+
+        void dispose() {
+            Scheduler s = instance;
+            if (s != null) {
+                synchronized (this) {
+                    s = instance;
+                    if (s != null) {
+                        s.dispose();
+                        instance = null;
+                    }
+                }
+            }
         }
     }
 }
