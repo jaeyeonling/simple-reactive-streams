@@ -2,6 +2,7 @@ package io.simplereactive.subscription;
 
 import io.simplereactive.core.Subscriber;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -32,10 +33,11 @@ public class ArraySubscription<T> extends BaseSubscription<T> {
      *
      * @param subscriber 데이터를 받을 Subscriber
      * @param array 발행할 배열
+     * @throws NullPointerException array가 null인 경우
      */
     public ArraySubscription(Subscriber<? super T> subscriber, T[] array) {
         super(subscriber);
-        this.array = array;
+        this.array = Objects.requireNonNull(array, "Array must not be null");
     }
 
     /**

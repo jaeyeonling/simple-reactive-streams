@@ -119,10 +119,22 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
     /**
      * downstream의 request를 upstream으로 전달합니다.
      *
+     * <p>Rule 3.9에 따라 n <= 0인 경우 onError를 시그널합니다.
+     *
      * @param n 요청할 데이터 개수
      */
     @Override
     public void request(long n) {
+        // Rule 3.9: n <= 0이면 에러 시그널
+        if (n <= 0) {
+            cancel();
+            if (markDone()) {
+                downstream.onError(new IllegalArgumentException(
+                        "Rule 3.9: request amount must be positive, but was " + n));
+            }
+            return;
+        }
+        
         Subscription s = upstream.get();
         if (s != null) {
             s.request(n);

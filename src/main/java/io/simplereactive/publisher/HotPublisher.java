@@ -268,10 +268,13 @@ public class HotPublisher<T> implements Publisher<T> {
         @Override
         public void request(long n) {
             // Rule 3.9: n <= 0이면 에러 시그널
+            // Rule 1.7: cancel 후 중복 시그널 방지
             if (n <= 0) {
-                cancel();
-                subscriber.onError(new IllegalArgumentException(
-                        "Rule 3.9: request amount must be positive, but was " + n));
+                if (cancelled.compareAndSet(false, true)) {
+                    parent.removeSubscription(this);
+                    subscriber.onError(new IllegalArgumentException(
+                            "Rule 3.9: request amount must be positive, but was " + n));
+                }
                 return;
             }
             // Hot Publisher는 양수 demand를 무시

@@ -116,6 +116,16 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
             if (done.get()) {
                 return;
             }
+            
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancel();
+                if (done.compareAndSet(false, true)) {
+                    downstream.onError(new NullPointerException("Rule 2.13: onNext called with null"));
+                }
+                return;
+            }
+            
             emitted.incrementAndGet();
             downstream.onNext(item);
         }

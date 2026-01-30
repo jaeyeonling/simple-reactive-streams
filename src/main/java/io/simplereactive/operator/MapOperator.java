@@ -87,6 +87,13 @@ public final class MapOperator<T, R> extends AbstractOperator<T, R> {
             if (isDone()) {
                 return;
             }
+            
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancelUpstream();
+                onError(new NullPointerException("Rule 2.13: onNext called with null"));
+                return;
+            }
 
             R mapped;
             try {
@@ -98,10 +105,10 @@ public final class MapOperator<T, R> extends AbstractOperator<T, R> {
                 return;
             }
 
-            // Rule 2.13: null 체크
+            // Rule 2.13: mapper 반환값 null 체크
             if (mapped == null) {
                 cancelUpstream();
-                onError(new NullPointerException("Mapper returned null for item: " + item));
+                onError(new NullPointerException("Rule 2.13: Mapper returned null for item: " + item));
                 return;
             }
 

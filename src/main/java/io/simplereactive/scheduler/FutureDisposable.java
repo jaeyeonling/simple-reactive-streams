@@ -1,5 +1,6 @@
 package io.simplereactive.scheduler;
 
+import java.util.Objects;
 import java.util.concurrent.Future;
 
 /**
@@ -30,9 +31,10 @@ public final class FutureDisposable implements Disposable {
      * FutureDisposable을 생성합니다.
      *
      * @param future 래핑할 Future
+     * @throws NullPointerException future가 null인 경우
      */
     public FutureDisposable(Future<?> future) {
-        this.future = future;
+        this.future = Objects.requireNonNull(future, "Future must not be null");
     }
 
     /**

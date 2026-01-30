@@ -91,6 +91,13 @@ public final class FilterOperator<T> extends AbstractOperator<T, T> {
             if (isDone()) {
                 return;
             }
+            
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancelUpstream();
+                onError(new NullPointerException("Rule 2.13: onNext called with null"));
+                return;
+            }
 
             boolean matches;
             try {

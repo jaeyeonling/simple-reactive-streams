@@ -98,6 +98,14 @@ public final class OnErrorReturnOperator<T> extends AbstractOperator<T, T> {
             if (isDone()) {
                 return;
             }
+            
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancelUpstream();
+                onError(new NullPointerException("Rule 2.13: onNext called with null"));
+                return;
+            }
+            
             downstream.onNext(item);
         }
 
@@ -115,6 +123,7 @@ public final class OnErrorReturnOperator<T> extends AbstractOperator<T, T> {
                 // fallback 함수에서 예외 발생 시 원래 에러와 함께 전달
                 ex.addSuppressed(t);
                 if (markDone()) {
+                    cancelUpstream();
                     downstream.onError(ex);
                 }
                 return;
@@ -123,8 +132,9 @@ public final class OnErrorReturnOperator<T> extends AbstractOperator<T, T> {
             // Rule 2.13: null 체크
             if (defaultValue == null) {
                 if (markDone()) {
+                    cancelUpstream();
                     downstream.onError(new NullPointerException(
-                            "Fallback returned null for error: " + t));
+                            "Rule 2.13: Fallback returned null for error: " + t));
                 }
                 return;
             }

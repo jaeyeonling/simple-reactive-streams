@@ -29,6 +29,14 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <h2>Backpressure</h2>
  * <p>request(n)만큼만 발행하며, 모든 요소 발행 후 onComplete를 호출합니다.
+ *
+ * <h2>관련 규약</h2>
+ * <ul>
+ *   <li>Rule 1.1: Publisher.subscribe는 onSubscribe를 호출해야 한다</li>
+ *   <li>Rule 1.9: subscribe의 인자가 null이면 NullPointerException을 던져야 한다</li>
+ *   <li>Rule 2.13: Subscriber가 예외를 던지면 구독을 취소하고 onError를 호출해야 한다</li>
+ *   <li>Rule 3.9: request(n)에서 n <= 0이면 onError를 호출해야 한다</li>
+ * </ul>
  */
 public final class RangePublisher implements Publisher<Integer> {
 

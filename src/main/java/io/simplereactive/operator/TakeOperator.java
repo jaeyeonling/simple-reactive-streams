@@ -97,6 +97,13 @@ public final class TakeOperator<T> extends AbstractOperator<T, T> {
             if (isDone()) {
                 return;
             }
+            
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancelUpstream();
+                onError(new NullPointerException("Rule 2.13: onNext called with null"));
+                return;
+            }
 
             long c = count.incrementAndGet();
             downstream.onNext(item);

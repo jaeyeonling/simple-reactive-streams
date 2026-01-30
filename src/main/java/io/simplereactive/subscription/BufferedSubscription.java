@@ -185,6 +185,12 @@ public class BufferedSubscription<T> implements Subscription {
     private void clearBufferIfNotDraining() {
         if (wip.getAndIncrement() == 0) {
             clearBuffer();
+            // WIP 복원 - drain이 진행 중이 아니었으므로 다시 0으로
+            // 다른 스레드가 동시에 wip를 증가시켰을 수 있으므로 addAndGet 사용
+            if (wip.addAndGet(-1) != 0) {
+                // 다른 스레드에서 drain 요청이 있었으면 drain 실행
+                drain();
+            }
         }
     }
 
