@@ -4,11 +4,14 @@ import io.simplereactive.operator.FilterOperator;
 import io.simplereactive.operator.MapOperator;
 import io.simplereactive.operator.OnErrorResumeOperator;
 import io.simplereactive.operator.OnErrorReturnOperator;
+import io.simplereactive.operator.PublishOnOperator;
+import io.simplereactive.operator.SubscribeOnOperator;
 import io.simplereactive.operator.TakeOperator;
 import io.simplereactive.publisher.ArrayPublisher;
 import io.simplereactive.publisher.EmptyPublisher;
 import io.simplereactive.publisher.ErrorPublisher;
 import io.simplereactive.publisher.RangePublisher;
+import io.simplereactive.scheduler.Scheduler;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -55,6 +58,8 @@ import java.util.function.Predicate;
  * @see TakeOperator
  * @see OnErrorResumeOperator
  * @see OnErrorReturnOperator
+ * @see SubscribeOnOperator
+ * @see PublishOnOperator
  */
 public class Flux<T> implements Publisher<T> {
 
@@ -268,6 +273,78 @@ public class Flux<T> implements Publisher<T> {
      */
     public Flux<T> onErrorReturn(T defaultValue) {
         return new Flux<>(new OnErrorReturnOperator<>(this, defaultValue));
+    }
+
+    // ========== Scheduler 메서드 ==========
+
+    /**
+     * 구독 시점의 스레드를 변경합니다.
+     *
+     * <p>subscribe() 호출이 지정된 Scheduler에서 실행됩니다.
+     * 결과적으로 upstream의 데이터 생성도 해당 Scheduler에서 실행됩니다.
+     *
+     * <pre>
+     * [main thread]
+     *      │
+     * subscribeOn(single)
+     *      │
+     *      │ ───────────────> [single-1 thread]
+     *      │                       │
+     *      │                  upstream.subscribe()
+     *      │                       │
+     *      │                  ──1──2──3──|
+     *      │                       │
+     *      ▼                       ▼
+     * downstream receives on [single-1 thread]
+     * </pre>
+     *
+     * <h3>subscribeOn vs publishOn</h3>
+     * <ul>
+     *   <li>subscribeOn: 구독이 시작되는 스레드 결정 (위치 무관)</li>
+     *   <li>publishOn: 이후 연산자들이 실행되는 스레드 결정 (위치 중요)</li>
+     * </ul>
+     *
+     * @param scheduler 구독을 실행할 Scheduler
+     * @return Scheduler가 적용된 Flux
+     * @see SubscribeOnOperator
+     */
+    public Flux<T> subscribeOn(Scheduler scheduler) {
+        return new Flux<>(new SubscribeOnOperator<>(this, scheduler));
+    }
+
+    /**
+     * 발행 시점의 스레드를 변경합니다.
+     *
+     * <p>upstream에서 받은 시그널이 지정된 Scheduler에서 전달됩니다.
+     * publishOn 이후의 연산자들은 해당 Scheduler에서 실행됩니다.
+     *
+     * <pre>
+     * [upstream thread]
+     *      │
+     * ──1──2──3──|
+     *      │
+     * publishOn(parallel)
+     *      │
+     *      │ ───────────────> [parallel-1 thread]
+     *      │                       │
+     *      │                  Queue → drain
+     *      │                       │
+     *      ▼                       ▼
+     * downstream receives on [parallel-1 thread]
+     * </pre>
+     *
+     * <h3>subscribeOn vs publishOn</h3>
+     * <ul>
+     *   <li>subscribeOn: 구독이 시작되는 스레드 결정 (위치 무관)</li>
+     *   <li>publishOn: 이후 연산자들이 실행되는 스레드 결정 (위치 중요)</li>
+     * </ul>
+     *
+     * @param scheduler 시그널을 발행할 Scheduler
+     * @return Scheduler가 적용된 Flux
+     * @see PublishOnOperator
+     */
+    public Flux<T> publishOn(Scheduler scheduler) {
+        return new Flux<>(new PublishOnOperator<>(this, scheduler));
     }
 
     // ========== Publisher 구현 ==========
