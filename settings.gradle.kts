@@ -1,1 +1,1 @@
-rootProject.name = "simple-reactivestreams"
+rootProject.name = "simple-reactive-streams"
