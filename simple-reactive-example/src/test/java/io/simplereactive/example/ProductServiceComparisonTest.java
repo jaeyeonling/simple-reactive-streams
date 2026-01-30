@@ -16,19 +16,15 @@ import static org.assertj.core.api.Assertions.*;
 @DisplayName("ProductService 비교")
 class ProductServiceComparisonTest {
 
-    private MockApis.ProductApi productApi;
-    private MockApis.ReviewApi reviewApi;
-    private MockApis.InventoryApi inventoryApi;
-
     private LegacyProductService legacyService;
     private ReactiveProductService reactiveService;
     private Scheduler ioScheduler;
 
     @BeforeEach
     void setUp() {
-        productApi = new MockApis.ProductApi();
-        reviewApi = new MockApis.ReviewApi();
-        inventoryApi = new MockApis.InventoryApi();
+        MockApis.ProductApi productApi = new MockApis.ProductApi();
+        MockApis.ReviewApi reviewApi = new MockApis.ReviewApi();
+        MockApis.InventoryApi inventoryApi = new MockApis.InventoryApi();
 
         legacyService = new LegacyProductService(productApi, reviewApi, inventoryApi);
         
