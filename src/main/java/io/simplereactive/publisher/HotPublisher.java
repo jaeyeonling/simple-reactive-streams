@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <h2>사용 예시</h2>
  * <pre>{@code
- * SimpleHotPublisher<String> hot = new SimpleHotPublisher<>();
+ * HotPublisher<String> hot = new HotPublisher<>();
  *
  * // 첫 번째 구독자
  * hot.subscribe(subscriberA);
@@ -78,7 +78,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @param <T> 발행할 요소의 타입
  * @see io.simplereactive.publisher.ArrayPublisher Cold Publisher 예시
  */
-public class SimpleHotPublisher<T> implements Publisher<T> {
+public class HotPublisher<T> implements Publisher<T> {
 
     private final List<HotSubscription<T>> subscriptions = new CopyOnWriteArrayList<>();
     private final AtomicBoolean completed = new AtomicBoolean(false);
@@ -213,10 +213,10 @@ public class SimpleHotPublisher<T> implements Publisher<T> {
     private static final class HotSubscription<T> implements Subscription {
 
         private final Subscriber<? super T> subscriber;
-        private final SimpleHotPublisher<T> parent;
+        private final HotPublisher<T> parent;
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
-        HotSubscription(Subscriber<? super T> subscriber, SimpleHotPublisher<T> parent) {
+        HotSubscription(Subscriber<? super T> subscriber, HotPublisher<T> parent) {
             this.subscriber = subscriber;
             this.parent = parent;
         }

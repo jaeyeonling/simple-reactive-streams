@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * SimpleHotPublisher 테스트.
+ * HotPublisher 테스트.
  *
  * <p>Module 7의 Hot Publisher 학습 검증을 위한 테스트입니다.
  *
@@ -24,13 +24,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * - 구독할 때마다 처음부터 발행
  * - 각 구독자가 독립적인 데이터 수신
  *
- * Hot Publisher (SimpleHotPublisher)
+ * Hot Publisher (HotPublisher)
  * - 구독 시점과 관계없이 계속 발행
  * - 늦게 구독하면 이전 데이터 놓침
  * - 모든 구독자가 같은 데이터 수신
  * </pre>
  */
-class SimpleHotPublisherTest {
+class HotPublisherTest {
 
     @Nested
     @DisplayName("기본 발행 동작")
@@ -40,7 +40,7 @@ class SimpleHotPublisherTest {
         @DisplayName("emit된 데이터를 구독자가 수신")
         void shouldReceiveEmittedData() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -57,7 +57,7 @@ class SimpleHotPublisherTest {
         @DisplayName("complete 후 onComplete 수신")
         void shouldReceiveOnComplete() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -74,7 +74,7 @@ class SimpleHotPublisherTest {
         @DisplayName("error 후 onError 수신")
         void shouldReceiveOnError() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
             var error = new RuntimeException("Test error");
@@ -97,7 +97,7 @@ class SimpleHotPublisherTest {
         @DisplayName("늦게 구독한 Subscriber는 이전 데이터를 받지 못함")
         void lateSubscriberMissesEarlierData() {
             // Given
-            var hot = new SimpleHotPublisher<String>();
+            var hot = new HotPublisher<String>();
             var subscriberA = new TestSubscriber<String>();
             var subscriberB = new TestSubscriber<String>();
 
@@ -130,7 +130,7 @@ class SimpleHotPublisherTest {
         @DisplayName("이미 완료된 Publisher에 구독하면 즉시 onComplete")
         void subscribeToCompletedPublisherReceivesOnComplete() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             hot.emit(1);
             hot.complete();
 
@@ -147,7 +147,7 @@ class SimpleHotPublisherTest {
         @DisplayName("에러로 종료된 Publisher에 구독하면 즉시 onError")
         void subscribeToErroredPublisherReceivesOnError() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var error = new RuntimeException("Already failed");
             hot.emit(1);
             hot.error(error);
@@ -170,7 +170,7 @@ class SimpleHotPublisherTest {
         @DisplayName("모든 구독자가 같은 데이터를 동시에 수신")
         void allSubscribersReceiveSameData() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber1 = new TestSubscriber<Integer>();
             var subscriber2 = new TestSubscriber<Integer>();
             var subscriber3 = new TestSubscriber<Integer>();
@@ -195,7 +195,7 @@ class SimpleHotPublisherTest {
         @DisplayName("구독자 수 확인")
         void shouldTrackSubscriberCount() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber1 = new TestSubscriber<Integer>();
             var subscriber2 = new TestSubscriber<Integer>();
 
@@ -225,7 +225,7 @@ class SimpleHotPublisherTest {
         @DisplayName("cancel 후 데이터를 받지 않음")
         void shouldNotReceiveDataAfterCancel() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -243,7 +243,7 @@ class SimpleHotPublisherTest {
         @DisplayName("일부 구독자만 취소해도 다른 구독자는 계속 수신")
         void otherSubscribersContinueAfterOneCancel() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber1 = new TestSubscriber<Integer>();
             var subscriber2 = new TestSubscriber<Integer>();
             hot.subscribe(subscriber1);
@@ -270,7 +270,7 @@ class SimpleHotPublisherTest {
         @DisplayName("complete 후 emit은 무시됨")
         void emitAfterCompleteIsIgnored() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -288,7 +288,7 @@ class SimpleHotPublisherTest {
         @DisplayName("complete 중복 호출 무시")
         void duplicateCompleteIsIgnored() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -304,7 +304,7 @@ class SimpleHotPublisherTest {
         @DisplayName("error 후 complete 무시")
         void completeAfterErrorIsIgnored() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -321,7 +321,7 @@ class SimpleHotPublisherTest {
         @DisplayName("isCompleted()로 완료 상태 확인")
         void shouldReportCompletedState() {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
 
             // When & Then
             assertThat(hot.isCompleted()).isFalse();
@@ -337,7 +337,7 @@ class SimpleHotPublisherTest {
         @Test
         @DisplayName("Rule 1.9: null subscriber는 NPE 발생")
         void nullSubscriberThrowsNPE() {
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
 
             assertThatThrownBy(() -> hot.subscribe(null))
                     .isInstanceOf(NullPointerException.class)
@@ -347,7 +347,7 @@ class SimpleHotPublisherTest {
         @Test
         @DisplayName("Rule 2.13: null emit은 NPE 발생")
         void nullEmitThrowsNPE() {
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
 
             assertThatThrownBy(() -> hot.emit(null))
                     .isInstanceOf(NullPointerException.class)
@@ -357,7 +357,7 @@ class SimpleHotPublisherTest {
         @Test
         @DisplayName("null error는 NPE 발생")
         void nullErrorThrowsNPE() {
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
 
             assertThatThrownBy(() -> hot.error(null))
                     .isInstanceOf(NullPointerException.class);
@@ -372,7 +372,7 @@ class SimpleHotPublisherTest {
         @DisplayName("여러 스레드에서 동시 emit 안전")
         void concurrentEmitIsSafe() throws InterruptedException {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriber = new TestSubscriber<Integer>();
             hot.subscribe(subscriber);
 
@@ -409,7 +409,7 @@ class SimpleHotPublisherTest {
         @DisplayName("emit과 subscribe 동시 호출 안전")
         void concurrentEmitAndSubscribeIsSafe() throws InterruptedException {
             // Given
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             int totalEmits = 1000;
             var latch = new CountDownLatch(2);
             ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -480,7 +480,7 @@ class SimpleHotPublisherTest {
         @DisplayName("Hot Publisher는 늦은 구독자가 이전 데이터 놓침 - 비교용")
         void hotPublisherLateSubscriberMissesData() {
             // Given - Hot Publisher
-            var hot = new SimpleHotPublisher<Integer>();
+            var hot = new HotPublisher<Integer>();
             var subscriberA = new TestSubscriber<Integer>();
             var subscriberB = new TestSubscriber<Integer>();
 
