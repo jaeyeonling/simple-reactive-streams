@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Publisher<String> error = new ErrorPublisher<>(new RuntimeException("Oops!"));
  * error.subscribe(subscriber);
  * // subscriber.onSubscribe() 호출
- * // subscriber.request(n) 시 즉시 onError() 호출
+ * // subscriber.onError() 즉시 호출 (request 불필요)
  * }</pre>
  *
  * <h2>관련 규약</h2>
@@ -51,6 +51,9 @@ public final class ErrorPublisher<T> implements Publisher<T> {
     /**
      * {@inheritDoc}
      *
+     * <p>onSubscribe 호출 후 즉시 onError를 호출합니다.
+     * request()를 기다리지 않고 바로 에러를 전달합니다.
+     *
      * @throws NullPointerException Rule 1.9 - subscriber가 null인 경우
      */
     @Override
@@ -59,45 +62,32 @@ public final class ErrorPublisher<T> implements Publisher<T> {
         if (subscriber == null) {
             throw new NullPointerException("Rule 1.9: Subscriber must not be null");
         }
-        subscriber.onSubscribe(new ErrorSubscription(subscriber, error));
+        
+        // Rule 1.1: onSubscribe 호출
+        subscriber.onSubscribe(new ErrorSubscription());
+        
+        // Rule 1.4: 즉시 onError 호출
+        subscriber.onError(error);
     }
 
     /**
      * 에러 Subscription 구현.
      *
-     * <p>request 시 즉시 onError를 호출합니다.
+     * <p>이미 에러가 발생했으므로 모든 요청은 무시됩니다.
      */
     private static final class ErrorSubscription implements Subscription {
 
-        private final Subscriber<?> subscriber;
-        private final Throwable error;
-        private final AtomicBoolean done = new AtomicBoolean(false);
-
-        ErrorSubscription(Subscriber<?> subscriber, Throwable error) {
-            this.subscriber = subscriber;
-            this.error = error;
-        }
+        private final AtomicBoolean cancelled = new AtomicBoolean(false);
 
         @Override
         public void request(long n) {
-            // Rule 3.9: n <= 0이면 다른 에러로 처리
-            if (n <= 0) {
-                if (done.compareAndSet(false, true)) {
-                    subscriber.onError(new IllegalArgumentException(
-                            "Rule 3.9: request amount must be positive, but was " + n));
-                }
-                return;
-            }
-
-            // Rule 1.4: 에러 시그널
-            if (done.compareAndSet(false, true)) {
-                subscriber.onError(error);
-            }
+            // 이미 에러가 발생했으므로 무시
+            // Rule 3.9는 이미 종료된 상태이므로 적용되지 않음
         }
 
         @Override
         public void cancel() {
-            done.set(true);
+            cancelled.set(true);
         }
     }
 }

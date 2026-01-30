@@ -1,4 +1,4 @@
-# Module 8: 실전 프로젝트 - 레거시 리팩터링
+# Module 9: 실전 프로젝트 - 레거시 리팩터링
 
 > ⏱️ 예상 시간: 3~4시간 | ★★★★★ 난이도
 
@@ -262,19 +262,14 @@ Module 4: map, filter, take Operator
 Module 5: 에러 처리와 전파
 Module 6: Scheduler와 비동기
 Module 7: Hot vs Cold Publisher
-Module 8: 실전 리팩터링
+Module 8: TCK로 규약 검증
+Module 9: 실전 리팩터링
 ```
 
 ### 다음 단계
 
-1. **TCK 테스트 통과** - 모든 구현체가 규약을 준수하는지 검증
-2. **Reactor 소스 읽기** - 실제 라이브러리 구현 비교
-3. **프로젝트 적용** - 실제 프로젝트에 적용해보기
-
-```bash
-# TCK 테스트 실행
-./gradlew test --tests "*Tck*"
-```
+1. **Reactor 소스 읽기** - 실제 라이브러리 구현 비교
+2. **프로젝트 적용** - 실제 프로젝트에 적용해보기
 
 ---
 

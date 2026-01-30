@@ -16,7 +16,7 @@ repositories {
 }
 
 dependencies {
-    // Testing
+    // Testing - JUnit
     testImplementation(platform("org.junit:junit-bom:6.0.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core:3.27.7")
@@ -25,13 +25,23 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     
     // Reactive Streams TCK (Technology Compatibility Kit)
-    // TCK 사용 시 org.reactivestreams 인터페이스가 필요하므로,
-    // 우리가 만든 인터페이스를 TCK의 인터페이스로 어댑팅해야 함
+    // TCK는 TestNG 기반이므로 TestNG 의존성 필요
     testImplementation("org.reactivestreams:reactive-streams-tck:1.0.4")
+    testImplementation("org.testng:testng:7.10.2")
 }
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+        showStandardStreams = true
+    }
+}
+
+// TCK 테스트 (TestNG 기반) 별도 태스크
+tasks.register<Test>("tckTest") {
+    useTestNG()
+    include("**/tck/**")
     testLogging {
         events("passed", "skipped", "failed")
         showStandardStreams = true
