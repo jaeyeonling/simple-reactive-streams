@@ -31,7 +31,7 @@ Reactive Streams 스펙을 직접 구현하며 학습하는 PBL(Problem-Based Le
 ## Project Structure
 
 ```
-simple-reactivestreams/
+simple-reactive-streams/
 ├── simple-reactive-core/           # 핵심 라이브러리
 │   └── src/main/java/io/simplereactive/
 │       ├── core/           # Publisher, Subscriber, Subscription, Processor, Flux
