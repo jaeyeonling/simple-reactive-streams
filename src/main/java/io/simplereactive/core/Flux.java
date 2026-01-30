@@ -127,12 +127,16 @@ public class Flux<T> implements Publisher<T> {
      * <p>start부터 시작하여 count개의 연속된 정수를 발행합니다.
      *
      * @param start 시작값 (포함)
-     * @param count 개수
+     * @param count 개수 (0 이상)
      * @return 범위 Flux
+     * @throws IllegalArgumentException count가 음수인 경우
      * @see RangePublisher
      */
     public static Flux<Integer> range(int start, int count) {
-        if (count <= 0) {
+        if (count < 0) {
+            throw new IllegalArgumentException("Count must be non-negative, but was " + count);
+        }
+        if (count == 0) {
             return empty();
         }
         return new Flux<>(new RangePublisher(start, count));
