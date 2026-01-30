@@ -54,15 +54,25 @@ public final class ImmediateScheduler implements Scheduler {
      * 현재 스레드에서 작업을 즉시 실행합니다.
      *
      * <p>작업이 완료된 후에 반환됩니다 (동기 실행).
+     * 작업에서 발생한 예외는 호출자에게 전파됩니다.
      *
      * @param task 실행할 작업
      * @return 이미 완료된 Disposable (작업이 즉시 실행되므로)
      * @throws NullPointerException task가 null인 경우
+     * @throws RuntimeException task 실행 중 발생한 예외
      */
     @Override
     public Disposable schedule(Runnable task) {
         Objects.requireNonNull(task, "Task must not be null");
-        task.run();
+        try {
+            task.run();
+        } catch (Throwable t) {
+            // 예외를 호출자에게 전파 (동기 실행의 의도된 동작)
+            if (t instanceof RuntimeException) {
+                throw (RuntimeException) t;
+            }
+            throw new RuntimeException("Task execution failed", t);
+        }
         return Disposable.DISPOSED;
     }
 
@@ -116,7 +126,15 @@ public final class ImmediateScheduler implements Scheduler {
                 return Disposable.DISPOSED;
             }
             
-            task.run();
+            try {
+                task.run();
+            } catch (Throwable t) {
+                // 예외를 호출자에게 전파 (동기 실행의 의도된 동작)
+                if (t instanceof RuntimeException) {
+                    throw (RuntimeException) t;
+                }
+                throw new RuntimeException("Task execution failed", t);
+            }
             return Disposable.DISPOSED;
         }
 

@@ -50,7 +50,7 @@ public abstract class AbstractOperator<T, R> implements Publisher<R> {
      */
     @Override
     public final void subscribe(Subscriber<? super R> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
+        Objects.requireNonNull(subscriber, "Rule 1.9: Subscriber must not be null");
         upstream.subscribe(createSubscriber(subscriber));
     }
 

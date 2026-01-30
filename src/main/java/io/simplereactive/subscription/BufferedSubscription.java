@@ -156,6 +156,14 @@ public class BufferedSubscription<T> implements Subscription {
         return bufferCount.get() >= bufferSize;
     }
 
+    /**
+     * 버퍼에 아이템을 추가합니다.
+     *
+     * <p>buffer.offer()와 bufferCount.incrementAndGet()은 별도의 atomic 연산이지만,
+     * drain() 메서드의 WIP 패턴이 동시 접근을 직렬화하므로 안전합니다.
+     *
+     * @param item 추가할 아이템
+     */
     private void addToBuffer(T item) {
         buffer.offer(item);
         bufferCount.incrementAndGet();

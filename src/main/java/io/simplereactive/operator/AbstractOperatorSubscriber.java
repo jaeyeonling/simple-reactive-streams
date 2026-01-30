@@ -3,6 +3,7 @@ package io.simplereactive.operator;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -86,9 +87,10 @@ public abstract class AbstractOperatorSubscriber<T, R> implements Subscriber<T>,
      * AbstractOperatorSubscriber를 생성합니다.
      *
      * @param downstream 실제 데이터를 받을 Subscriber
+     * @throws NullPointerException downstream이 null인 경우
      */
     protected AbstractOperatorSubscriber(Subscriber<? super R> downstream) {
-        this.downstream = downstream;
+        this.downstream = Objects.requireNonNull(downstream, "Downstream must not be null");
     }
 
     // ========== Subscriber 구현 ==========

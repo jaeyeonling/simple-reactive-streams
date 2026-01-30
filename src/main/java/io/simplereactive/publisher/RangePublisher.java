@@ -59,7 +59,7 @@ public final class RangePublisher implements Publisher<Integer> {
     @Override
     public void subscribe(Subscriber<? super Integer> subscriber) {
         if (subscriber == null) {
-            throw new NullPointerException("Subscriber must not be null");
+            throw new NullPointerException("Rule 1.9: Subscriber must not be null");
         }
         subscriber.onSubscribe(new RangeSubscription(subscriber, start, count));
     }
@@ -77,6 +77,7 @@ public final class RangePublisher implements Publisher<Integer> {
         private final AtomicInteger current;
         private final AtomicLong requested = new AtomicLong(0);
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private final AtomicBoolean done = new AtomicBoolean(false);
         private final AtomicInteger wip = new AtomicInteger(0);
 
         RangeSubscription(Subscriber<? super Integer> subscriber, int start, int count) {
@@ -88,9 +89,12 @@ public final class RangePublisher implements Publisher<Integer> {
         @Override
         public void request(long n) {
             if (n <= 0) {
-                cancel();
-                subscriber.onError(new IllegalArgumentException(
-                        "Rule 3.9: request amount must be positive, but was " + n));
+                // Rule 3.9: 이미 에러/완료 상태면 중복 에러 방지
+                if (done.compareAndSet(false, true)) {
+                    cancelled.set(true);
+                    subscriber.onError(new IllegalArgumentException(
+                            "Rule 3.9: request amount must be positive, but was " + n));
+                }
                 return;
             }
 
@@ -140,12 +144,23 @@ public final class RangePublisher implements Publisher<Integer> {
                     int value = current.getAndIncrement();
                     if (value >= end) {
                         // 범위를 벗어난 경우 완료
-                        subscriber.onComplete();
+                        if (done.compareAndSet(false, true)) {
+                            subscriber.onComplete();
+                        }
                         return;
                     }
 
-                    subscriber.onNext(value);
-                    emitted++;
+                    try {
+                        subscriber.onNext(value);
+                        emitted++;
+                    } catch (Throwable t) {
+                        // Rule 2.13: Subscriber가 예외를 던지면 구독 취소
+                        cancelled.set(true);
+                        if (done.compareAndSet(false, true)) {
+                            subscriber.onError(t);
+                        }
+                        return;
+                    }
                 }
 
                 if (emitted > 0 && requested.get() != Long.MAX_VALUE) {

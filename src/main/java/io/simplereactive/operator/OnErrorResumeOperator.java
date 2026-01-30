@@ -73,7 +73,7 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
 
     @Override
     public void subscribe(Subscriber<? super T> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
+        Objects.requireNonNull(subscriber, "Rule 1.9: Subscriber must not be null");
         upstream.subscribe(new OnErrorResumeSubscriber<>(subscriber, fallback));
     }
 
@@ -148,6 +148,8 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
             }
 
             // 남은 demand 계산
+            // Note: requested와 emitted가 별도 atomic 연산이라 정확하지 않을 수 있으나,
+            // 근사값으로 충분하며 fallback에서 추가 request가 가능하므로 문제없음
             long remainingDemand = requested.get() - emitted.get();
             
             // fallback으로 전환

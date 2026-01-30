@@ -1,5 +1,6 @@
 package io.simplereactive.core;
 
+import io.simplereactive.scheduler.Disposable;
 import io.simplereactive.subscription.Subscriptions;
 
 import java.util.List;
@@ -129,12 +130,7 @@ public class ConnectableFlux<T> implements Publisher<T> {
     public Disposable connect() {
         if (connected.compareAndSet(false, true)) {
             upstream.subscribe(new InnerSubscriber());
-            Disposable d = () -> {
-                Subscription s = upstreamSubscription.get();
-                if (s != null) {
-                    s.cancel();
-                }
-            };
+            Disposable d = new ConnectionDisposable(upstreamSubscription);
             disposable.set(d);
         }
         return disposable.get();
@@ -237,19 +233,6 @@ public class ConnectableFlux<T> implements Publisher<T> {
     }
 
     /**
-     * 연결 해제를 위한 함수형 인터페이스.
-     */
-    @FunctionalInterface
-    public interface Disposable {
-        /**
-         * 연결을 해제합니다.
-         * 
-         * <p>upstream의 Subscription.cancel()을 호출합니다.
-         */
-        void dispose();
-    }
-
-    /**
      * 자동 연결을 위한 Publisher 래퍼.
      * 
      * <p>스레드 안전성을 위해 AtomicInteger/AtomicBoolean을 사용합니다.
@@ -314,6 +297,33 @@ public class ConnectableFlux<T> implements Publisher<T> {
         
         boolean isCancelled() {
             return cancelled.get();
+        }
+    }
+
+    /**
+     * 연결 해제를 위한 Disposable 구현.
+     */
+    private static class ConnectionDisposable implements Disposable {
+        private final AtomicReference<Subscription> subscriptionRef;
+        private final AtomicBoolean disposed = new AtomicBoolean(false);
+
+        ConnectionDisposable(AtomicReference<Subscription> subscriptionRef) {
+            this.subscriptionRef = subscriptionRef;
+        }
+
+        @Override
+        public void dispose() {
+            if (disposed.compareAndSet(false, true)) {
+                Subscription s = subscriptionRef.get();
+                if (s != null) {
+                    s.cancel();
+                }
+            }
+        }
+
+        @Override
+        public boolean isDisposed() {
+            return disposed.get();
         }
     }
 }

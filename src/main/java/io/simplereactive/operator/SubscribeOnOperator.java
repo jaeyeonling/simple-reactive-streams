@@ -88,7 +88,7 @@ public final class SubscribeOnOperator<T> implements Publisher<T> {
 
     @Override
     public void subscribe(Subscriber<? super T> subscriber) {
-        Objects.requireNonNull(subscriber, "Subscriber must not be null");
+        Objects.requireNonNull(subscriber, "Rule 1.9: Subscriber must not be null");
 
         // Scheduler에서 구독 실행
         scheduler.schedule(() -> upstream.subscribe(new SubscribeOnSubscriber<>(subscriber)));

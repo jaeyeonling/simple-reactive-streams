@@ -53,6 +53,7 @@ public final class ErrorPublisher<T> implements Publisher<T> {
      *
      * <p>onSubscribe 호출 후 즉시 onError를 호출합니다.
      * request()를 기다리지 않고 바로 에러를 전달합니다.
+     * 단, Subscriber가 onSubscribe에서 cancel()을 호출한 경우 onError를 호출하지 않습니다.
      *
      * @throws NullPointerException Rule 1.9 - subscriber가 null인 경우
      */
@@ -63,11 +64,16 @@ public final class ErrorPublisher<T> implements Publisher<T> {
             throw new NullPointerException("Rule 1.9: Subscriber must not be null");
         }
         
-        // Rule 1.1: onSubscribe 호출
-        subscriber.onSubscribe(new ErrorSubscription());
+        ErrorSubscription subscription = new ErrorSubscription();
         
-        // Rule 1.4: 즉시 onError 호출
-        subscriber.onError(error);
+        // Rule 1.1: onSubscribe 호출
+        subscriber.onSubscribe(subscription);
+        
+        // Rule 1.4: onError 호출 (단, cancel되지 않은 경우에만)
+        // Rule 1.7: cancel 후에는 시그널을 보내지 않음
+        if (!subscription.isCancelled()) {
+            subscriber.onError(error);
+        }
     }
 
     /**
@@ -88,6 +94,10 @@ public final class ErrorPublisher<T> implements Publisher<T> {
         @Override
         public void cancel() {
             cancelled.set(true);
+        }
+        
+        boolean isCancelled() {
+            return cancelled.get();
         }
     }
 }

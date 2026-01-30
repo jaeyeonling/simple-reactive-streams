@@ -25,16 +25,21 @@ public final class Subscriptions {
 
     /**
      * 빈 Subscription 싱글톤 인스턴스.
+     *
+     * <p>이미 종료된 상태를 나타내므로 request()와 cancel()이 무시됩니다.
+     * Rule 3.9 (request(n <= 0) 시 에러)도 적용되지 않습니다 - 이미 종료된 
+     * Subscription에서는 어떤 시그널도 발생하지 않아야 하기 때문입니다.
      */
     private static final Subscription EMPTY = new Subscription() {
         @Override
         public void request(long n) {
-            // 아무 동작 없음 - 이미 완료됨
+            // 아무 동작 없음 - 이미 종료됨
+            // Rule 3.9는 적용되지 않음 (종료된 상태에서 시그널 금지)
         }
 
         @Override
         public void cancel() {
-            // 아무 동작 없음 - 이미 완료됨
+            // 아무 동작 없음 - 이미 종료됨
         }
 
         @Override

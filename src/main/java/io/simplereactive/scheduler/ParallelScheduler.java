@@ -139,10 +139,25 @@ public final class ParallelScheduler implements Scheduler {
      * <p>각 Worker는 독립적인 단일 스레드를 사용하여 작업을 순차적으로 실행합니다.
      * 이를 통해 Reactive Streams 시그널 순서가 보장됩니다.
      *
-     * <p><b>주의:</b> Worker 사용 후 반드시 {@link Worker#dispose()}를 호출하여
-     * 스레드 리소스를 해제해야 합니다.
+     * <h3>⚠️ 스레드 누수 방지</h3>
+     * <p><b>중요:</b> Worker 사용 후 반드시 {@link Worker#dispose()}를 호출하여
+     * 스레드 리소스를 해제해야 합니다. dispose()를 호출하지 않으면 스레드 누수가
+     * 발생합니다.
+     *
+     * <pre>{@code
+     * Worker worker = scheduler.createWorker();
+     * try {
+     *     worker.schedule(() -> doWork());
+     * } finally {
+     *     worker.dispose(); // 반드시 호출!
+     * }
+     * }</pre>
+     *
+     * <p>일반적으로 Operator 내부에서 Worker를 생성하고, cancel이나 종료 시
+     * 자동으로 dispose()를 호출하도록 구현합니다. (예: PublishOnOperator)
      *
      * @return ParallelWorker 인스턴스
+     * @see PublishOnOperator PublishOnOperator - Worker의 올바른 사용 예시
      */
     @Override
     public Worker createWorker() {

@@ -239,6 +239,8 @@ public final class PublishOnOperator<T> implements Publisher<T> {
                 if (s != null) {
                     s.cancel();
                 }
+                // 메모리 누수 방지: 큐에 남은 아이템 정리
+                queue.clear();
                 worker.dispose();
             }
         }
