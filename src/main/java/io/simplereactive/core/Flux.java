@@ -347,6 +347,80 @@ public class Flux<T> implements Publisher<T> {
         return new Flux<>(new PublishOnOperator<>(this, scheduler));
     }
 
+    // ========== Hot Publisher 변환 ==========
+
+    /**
+     * Cold Publisher를 ConnectableFlux로 변환합니다.
+     *
+     * <p>connect()를 호출하기 전까지는 upstream에 구독하지 않으며,
+     * connect() 호출 시 모든 구독자에게 동시에 데이터가 발행됩니다.
+     *
+     * <pre>
+     * Cold Publisher          ConnectableFlux
+     * ─────────────          ─────────────────
+     * 구독마다 새로 시작  →   connect() 시 한 번만 시작
+     *                        모든 구독자에게 멀티캐스트
+     * </pre>
+     *
+     * <h3>사용 예시</h3>
+     * <pre>{@code
+     * ConnectableFlux<Integer> hot = Flux.range(1, 5).publish();
+     *
+     * // 구독자 등록 (아직 데이터 안 받음)
+     * hot.subscribe(subscriberA);
+     * hot.subscribe(subscriberB);
+     *
+     * // connect() 호출 시 모든 구독자에게 동시 발행
+     * hot.connect();
+     * }</pre>
+     *
+     * @return 수동 연결 가능한 ConnectableFlux
+     * @see ConnectableFlux
+     * @see #share()
+     */
+    public ConnectableFlux<T> publish() {
+        return new ConnectableFlux<>(this);
+    }
+
+    /**
+     * Cold Publisher를 자동 연결 Hot Publisher로 변환합니다.
+     *
+     * <p>첫 번째 구독자가 등록될 때 자동으로 upstream에 연결됩니다.
+     * 이후 구독자들은 진행 중인 스트림에 합류합니다.
+     *
+     * <pre>
+     * Cold Publisher        share()
+     * ─────────────        ───────
+     * A 구독 → 1,2,3,4,5   A 구독 → 1,2,3,4,5
+     * B 구독 → 1,2,3,4,5   B 구독 → (놓침),3,4,5  ← 늦게 구독하면 이전 데이터 놓침
+     * </pre>
+     *
+     * <h3>사용 예시</h3>
+     * <pre>{@code
+     * Flux<Integer> shared = Flux.range(1, 5).share();
+     *
+     * // 첫 구독자 - 자동 연결
+     * shared.subscribe(subscriberA);  // 1, 2, 3, 4, 5 수신
+     *
+     * // 늦은 구독자 - 진행 중인 스트림 합류
+     * shared.subscribe(subscriberB);  // 이미 발행된 데이터는 놓침
+     * }</pre>
+     *
+     * <h3>publish().autoConnect()와 동일</h3>
+     * <pre>{@code
+     * // 아래 두 코드는 동일
+     * flux.share()
+     * flux.publish().autoConnect()
+     * }</pre>
+     *
+     * @return 자동 연결 Hot Publisher
+     * @see #publish()
+     * @see ConnectableFlux#autoConnect()
+     */
+    public Flux<T> share() {
+        return publish().autoConnect();
+    }
+
     // ========== Publisher 구현 ==========
 
     /**
