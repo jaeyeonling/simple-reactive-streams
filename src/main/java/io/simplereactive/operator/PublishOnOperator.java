@@ -4,6 +4,7 @@ import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
 import io.simplereactive.scheduler.Scheduler;
+import io.simplereactive.scheduler.Worker;
 
 import java.util.Objects;
 import java.util.Queue;
@@ -95,7 +96,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
     public void subscribe(Subscriber<? super T> subscriber) {
         Objects.requireNonNull(subscriber, "Subscriber must not be null");
         
-        Scheduler.Worker worker = scheduler.createWorker();
+        Worker worker = scheduler.createWorker();
         upstream.subscribe(new PublishOnSubscriber<>(subscriber, worker));
     }
 
@@ -107,7 +108,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
     private static final class PublishOnSubscriber<T> implements Subscriber<T>, Subscription, Runnable {
 
         private final Subscriber<? super T> downstream;
-        private final Scheduler.Worker worker;
+        private final Worker worker;
         private final Queue<T> queue;
         
         private final AtomicReference<Subscription> upstream = new AtomicReference<>();
@@ -119,7 +120,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
         private volatile Throwable error;
         private volatile boolean completed;
 
-        PublishOnSubscriber(Subscriber<? super T> downstream, Scheduler.Worker worker) {
+        PublishOnSubscriber(Subscriber<? super T> downstream, Worker worker) {
             this.downstream = downstream;
             this.worker = worker;
             this.queue = new ConcurrentLinkedQueue<>();

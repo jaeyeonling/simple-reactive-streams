@@ -43,6 +43,7 @@ package io.simplereactive.scheduler;
  * </ul>
  *
  * @see Schedulers
+ * @see Worker
  */
 public interface Scheduler {
 
@@ -64,6 +65,7 @@ public interface Scheduler {
      * Worker 내에서 스케줄된 작업들은 순차적으로 실행됩니다.
      *
      * @return 새로운 Worker 인스턴스
+     * @see Worker
      */
     Worker createWorker();
 
@@ -81,29 +83,4 @@ public interface Scheduler {
      * @return dispose 되었으면 true
      */
     boolean isDisposed();
-
-    /**
-     * 작업을 순차적으로 실행하는 독립적인 실행 컨텍스트.
-     *
-     * <p>Worker 내에서 스케줄된 작업들은 순서가 보장됩니다.
-     * 이는 Reactive Streams의 시그널 순서 보장에 중요합니다.
-     *
-     * <h2>Worker의 특성</h2>
-     * <ul>
-     *   <li>작업들은 FIFO 순서로 실행</li>
-     *   <li>동일 Worker 내 작업은 동시에 실행되지 않음</li>
-     *   <li>dispose 시 대기 중인 작업도 취소됨</li>
-     * </ul>
-     */
-    interface Worker extends Disposable {
-
-        /**
-         * Worker의 실행 컨텍스트에서 작업을 스케줄합니다.
-         *
-         * @param task 실행할 작업
-         * @return 작업 취소를 위한 Disposable
-         * @throws NullPointerException task가 null인 경우
-         */
-        Disposable schedule(Runnable task);
-    }
 }
