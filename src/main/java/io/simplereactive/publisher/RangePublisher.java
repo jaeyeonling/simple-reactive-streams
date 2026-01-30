@@ -102,17 +102,13 @@ public final class RangePublisher implements Publisher<Integer> {
          * 오버플로우 시 Long.MAX_VALUE로 설정합니다.
          */
         private void addRequest(long n) {
-            long current, next;
-            do {
-                current = requested.get();
+            requested.getAndUpdate(current -> {
                 if (current == Long.MAX_VALUE) {
-                    return;
+                    return Long.MAX_VALUE;
                 }
-                next = current + n;
-                if (next < 0) {
-                    next = Long.MAX_VALUE;
-                }
-            } while (!requested.compareAndSet(current, next));
+                long next = current + n;
+                return next < 0 ? Long.MAX_VALUE : next;
+            });
         }
 
         /**

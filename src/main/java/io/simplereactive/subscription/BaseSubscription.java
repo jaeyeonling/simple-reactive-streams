@@ -252,17 +252,13 @@ public abstract class BaseSubscription<T> implements Subscription {
      * demand를 추가합니다 (overflow 방지).
      */
     private void addDemand(long n) {
-        long current, next;
-        do {
-            current = requested.get();
+        requested.getAndUpdate(current -> {
             if (current == Long.MAX_VALUE) {
-                return; // 이미 unbounded
+                return Long.MAX_VALUE; // 이미 unbounded
             }
-            next = current + n;
-            if (next < 0) {
-                next = Long.MAX_VALUE; // overflow → unbounded
-            }
-        } while (!requested.compareAndSet(current, next));
+            long next = current + n;
+            return next < 0 ? Long.MAX_VALUE : next; // overflow → unbounded
+        });
     }
 
     /**

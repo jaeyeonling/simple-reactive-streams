@@ -112,16 +112,12 @@ public class ManualSubscription implements Subscription {
      * request 양을 추가합니다 (overflow 방지).
      */
     private void addRequest(long n) {
-        long current, next;
-        do {
-            current = requested.get();
+        requested.getAndUpdate(current -> {
             if (current == Long.MAX_VALUE) {
-                return;
+                return Long.MAX_VALUE;
             }
-            next = current + n;
-            if (next < 0) {
-                next = Long.MAX_VALUE;
-            }
-        } while (!requested.compareAndSet(current, next));
+            long next = current + n;
+            return next < 0 ? Long.MAX_VALUE : next;
+        });
     }
 }

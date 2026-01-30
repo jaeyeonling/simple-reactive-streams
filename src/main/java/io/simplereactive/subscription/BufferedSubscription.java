@@ -220,17 +220,13 @@ public class BufferedSubscription<T> implements Subscription {
     // ========== private 메서드: demand 관리 ==========
 
     private void addDemand(long n) {
-        long current, next;
-        do {
-            current = demand.get();
+        demand.getAndUpdate(current -> {
             if (current == Long.MAX_VALUE) {
-                return;
+                return Long.MAX_VALUE;
             }
-            next = current + n;
-            if (next < 0) {
-                next = Long.MAX_VALUE;
-            }
-        } while (!demand.compareAndSet(current, next));
+            long next = current + n;
+            return next < 0 ? Long.MAX_VALUE : next;
+        });
     }
 
     private void decrementDemand(long n) {
