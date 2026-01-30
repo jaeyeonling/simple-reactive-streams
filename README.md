@@ -16,20 +16,18 @@ Reactor나 RxJava를 사용하면서 이런 의문이 들었던 적 없나요?
 
 ## 학습 로드맵
 
-| Module | 주제 | 시간 | 난이도 | 브랜치 |
-|--------|------|------|--------|--------|
-| 0 | 시작하기 | 30분 | ★☆☆☆☆ | `module-0-setup` |
-| 1 | 핵심 인터페이스 | 1시간 | ★★☆☆☆ | `module-1-interfaces` |
-| 2 | 첫 번째 Publisher | 2시간 | ★★★☆☆ | `module-2-publisher` |
-| 3 | Backpressure | 2시간 | ★★★★☆ | `module-3-backpressure` |
-| 4 | Operators | 3시간 | ★★★★☆ | `module-4-operators` |
-| 5 | 에러 처리 | 1.5시간 | ★★★☆☆ | `module-5-errors` |
-| 6 | Scheduler | 2.5시간 | ★★★★★ | `module-6-scheduler` |
-| 7 | Hot vs Cold | 1.5시간 | ★★★☆☆ | `module-7-hot-cold` |
-| 8 | TCK 검증 | 2시간 | ★★★☆☆ | `module-8-tck` |
-| 9 | 실전 프로젝트 | 3~4시간 | ★★★★★ | `module-9-project` |
-
-**총 학습 시간: 약 19~20시간**
+| Module | 주제 | 학습 내용 | 난이도 | 브랜치 |
+|--------|------|----------|--------|--------|
+| 0 | [시작하기](docs/module-0-introduction) | 환경 설정, Reactive Streams 소개 | ★☆☆☆☆ | [`module-0-setup`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-0-setup) |
+| 1 | [핵심 인터페이스](docs/module-1-core-interfaces) | Publisher, Subscriber, Subscription, Processor | ★★☆☆☆ | [`module-1-interfaces`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-1-interfaces) |
+| 2 | [첫 번째 Publisher](docs/module-2-first-publisher) | ArrayPublisher 구현, Cold Publisher | ★★★☆☆ | [`module-2-publisher`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-2-publisher) |
+| 3 | [Backpressure](docs/module-3-backpressure) | request(n), Demand 관리, BufferedSubscriber | ★★★★☆ | [`module-3-backpressure`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-3-backpressure) |
+| 4 | [Operators](docs/module-4-operators) | map, filter, take 구현 | ★★★★☆ | [`module-4-operators`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-4-operators) |
+| 5 | [에러 처리](docs/module-5-error-handling) | onError, onErrorResume, onErrorReturn | ★★★☆☆ | [`module-5-error-handling`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-5-error-handling) |
+| 6 | [Scheduler](docs/module-6-scheduler) | subscribeOn, publishOn, 스레드 관리 | ★★★★★ | [`module-6-scheduler`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-6-scheduler) |
+| 7 | [Hot vs Cold](docs/module-7-hot-cold) | HotPublisher, ConnectableFlux, share() | ★★★☆☆ | [`module-7-hot-cold`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-7-hot-cold) |
+| 8 | [TCK 검증](docs/module-8-tck) | Reactive Streams TCK로 규약 검증 | ★★★☆☆ | [`module-8-tck`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-8-tck) |
+| 9 | [실전 프로젝트](docs/module-9-real-world-project) | 레거시 코드 리팩터링, DeferPublisher, Zip | ★★★★★ | [`module-9-real-world`](https://github.com/jaeyeonling/simple-reactive-streams/tree/module-9-real-world) |
 
 ## 브랜치 기반 학습
 
