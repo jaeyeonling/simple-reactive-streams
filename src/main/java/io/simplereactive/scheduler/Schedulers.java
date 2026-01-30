@@ -41,8 +41,12 @@ public final class Schedulers {
         // 유틸리티 클래스
     }
 
-    // 싱글톤 Scheduler 인스턴스들
+    // ========== 싱글톤 인스턴스 ==========
+    
+    // Immediate: eager 초기화 - 리소스(스레드) 없음, 가볍고 항상 사용됨
     private static final Scheduler IMMEDIATE = new ImmediateScheduler();
+    
+    // Single/Parallel: lazy 초기화 - 스레드 생성 비용이 있어 실제 사용 시점에 초기화
     private static volatile Scheduler SINGLE;
     private static volatile Scheduler PARALLEL;
 
