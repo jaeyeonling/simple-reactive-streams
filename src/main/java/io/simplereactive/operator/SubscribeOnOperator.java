@@ -95,50 +95,55 @@ public final class SubscribeOnOperator<T> implements Publisher<T> {
     }
 
     /**
-     * 단순히 시그널을 전달하는 Subscriber.
+     * 시그널을 전달하는 Subscriber.
      *
-     * <p>upstream의 시그널을 그대로 downstream에 전달합니다.
-     * 스레드 전환은 이미 subscribe() 시점에 이루어졌으므로
-     * 추가적인 처리는 필요 없습니다.
+     * <p>AbstractOperatorSubscriber를 상속하여 다음을 보장합니다:
+     * <ul>
+     *   <li>스레드 안전한 upstream 관리 (AtomicReference)</li>
+     *   <li>중복 onSubscribe 방지 (Rule 2.12)</li>
+     *   <li>종료 후 시그널 차단 (Rule 1.7)</li>
+     *   <li>null 체크 (Rule 2.13)</li>
+     * </ul>
      */
-    private static final class SubscribeOnSubscriber<T> implements Subscriber<T>, Subscription {
-
-        private final Subscriber<? super T> downstream;
-        private Subscription upstream;
+    private static final class SubscribeOnSubscriber<T> extends AbstractOperatorSubscriber<T, T> {
 
         SubscribeOnSubscriber(Subscriber<? super T> downstream) {
-            this.downstream = downstream;
-        }
-
-        @Override
-        public void onSubscribe(Subscription s) {
-            this.upstream = s;
-            downstream.onSubscribe(this);
+            super(downstream);
         }
 
         @Override
         public void onNext(T item) {
+            // Rule 2.13: null 체크
+            if (item == null) {
+                cancelUpstream();
+                onError(new NullPointerException("Rule 2.13: onNext item must not be null"));
+                return;
+            }
+            
+            if (isDone()) {
+                return;
+            }
+            
             downstream.onNext(item);
         }
 
         @Override
         public void onError(Throwable t) {
-            downstream.onError(t);
+            // Rule 2.13: null 체크
+            if (t == null) {
+                t = new NullPointerException("Rule 2.13: onError throwable must not be null");
+            }
+            
+            if (markDone()) {
+                downstream.onError(t);
+            }
         }
 
         @Override
         public void onComplete() {
-            downstream.onComplete();
-        }
-
-        @Override
-        public void request(long n) {
-            upstream.request(n);
-        }
-
-        @Override
-        public void cancel() {
-            upstream.cancel();
+            if (markDone()) {
+                downstream.onComplete();
+            }
         }
     }
 }

@@ -104,6 +104,14 @@ public final class PublishOnOperator<T> implements Publisher<T> {
      * 시그널을 큐에 버퍼링하고 Scheduler에서 drain하는 Subscriber.
      *
      * <p>WIP 패턴을 사용하여 동시에 여러 drain이 실행되지 않도록 합니다.
+     *
+     * <h3>Reactive Streams 규약 준수</h3>
+     * <ul>
+     *   <li>Rule 1.7: 종료 후 시그널 차단</li>
+     *   <li>Rule 2.12: 중복 onSubscribe 방지</li>
+     *   <li>Rule 2.13: null 체크</li>
+     *   <li>Rule 3.9: request(n<=0) 시 onError</li>
+     * </ul>
      */
     private static final class PublishOnSubscriber<T> implements Subscriber<T>, Subscription, Runnable {
 
@@ -117,6 +125,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
         private final AtomicBoolean done = new AtomicBoolean(false);
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
         
+        // error를 먼저 설정하고 completed를 나중에 설정 (메모리 가시성)
         private volatile Throwable error;
         private volatile boolean completed;
 
@@ -130,6 +139,12 @@ public final class PublishOnOperator<T> implements Publisher<T> {
 
         @Override
         public void onSubscribe(Subscription s) {
+            // Rule 2.13: null 체크
+            if (s == null) {
+                throw new NullPointerException("Rule 2.13: Subscription must not be null");
+            }
+            
+            // Rule 2.12: 중복 onSubscribe 방지
             if (upstream.compareAndSet(null, s)) {
                 downstream.onSubscribe(this);
             } else {
@@ -139,6 +154,17 @@ public final class PublishOnOperator<T> implements Publisher<T> {
 
         @Override
         public void onNext(T item) {
+            // Rule 2.13: null 체크
+            if (item == null) {
+                Subscription s = upstream.get();
+                if (s != null) {
+                    s.cancel();
+                }
+                onError(new NullPointerException("Rule 2.13: onNext item must not be null"));
+                return;
+            }
+            
+            // Rule 1.7: 종료 후 시그널 차단
             if (done.get()) {
                 return;
             }
@@ -149,10 +175,17 @@ public final class PublishOnOperator<T> implements Publisher<T> {
 
         @Override
         public void onError(Throwable t) {
+            // Rule 2.13: null 체크
+            if (t == null) {
+                t = new NullPointerException("Rule 2.13: onError throwable must not be null");
+            }
+            
+            // Rule 1.7: 종료 후 시그널 차단
             if (done.get()) {
                 return;
             }
             
+            // error를 먼저 설정 (메모리 가시성: completed 읽기 전에 error가 보임)
             error = t;
             completed = true;
             trySchedule();
@@ -160,6 +193,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
 
         @Override
         public void onComplete() {
+            // Rule 1.7: 종료 후 시그널 차단
             if (done.get()) {
                 return;
             }
@@ -172,16 +206,23 @@ public final class PublishOnOperator<T> implements Publisher<T> {
 
         @Override
         public void request(long n) {
+            // Rule 3.9: request(n <= 0) 시 onError
             if (n <= 0) {
+                Subscription s = upstream.get();
+                if (s != null) {
+                    s.cancel();
+                }
+                onError(new IllegalArgumentException(
+                        "Rule 3.9: Request must be positive, but was " + n));
                 return;
             }
             
-            // demand 추가
+            // demand 추가 (overflow 방지)
             for (;;) {
                 long current = requested.get();
                 long next = current + n;
                 if (next < 0) {
-                    next = Long.MAX_VALUE;  // overflow 방지
+                    next = Long.MAX_VALUE;
                 }
                 if (requested.compareAndSet(current, next)) {
                     break;
@@ -200,11 +241,11 @@ public final class PublishOnOperator<T> implements Publisher<T> {
         @Override
         public void cancel() {
             if (cancelled.compareAndSet(false, true)) {
-                worker.dispose();
                 Subscription s = upstream.get();
                 if (s != null) {
                     s.cancel();
                 }
+                worker.dispose();
             }
         }
 
@@ -230,24 +271,21 @@ public final class PublishOnOperator<T> implements Publisher<T> {
                     
                     if (item == null) {
                         // 큐가 비었으면 완료 상태 확인
-                        if (completed) {
-                            Throwable ex = error;
-                            if (ex != null) {
-                                if (done.compareAndSet(false, true)) {
-                                    downstream.onError(ex);
-                                }
-                            } else {
-                                if (done.compareAndSet(false, true)) {
-                                    downstream.onComplete();
-                                }
-                            }
-                            worker.dispose();
+                        if (checkTerminated()) {
                             return;
                         }
                         break;
                     }
 
-                    downstream.onNext(item);
+                    // downstream.onNext 호출 (예외 발생 시 처리)
+                    try {
+                        downstream.onNext(item);
+                    } catch (Throwable ex) {
+                        // downstream에서 예외 발생 시 취소하고 정리
+                        cancel();
+                        queue.clear();
+                        return;
+                    }
                     e++;
                 }
 
@@ -257,18 +295,7 @@ public final class PublishOnOperator<T> implements Publisher<T> {
                 }
 
                 // 완료 상태 확인 (demand 없이도)
-                if (queue.isEmpty() && completed) {
-                    Throwable ex = error;
-                    if (ex != null) {
-                        if (done.compareAndSet(false, true)) {
-                            downstream.onError(ex);
-                        }
-                    } else {
-                        if (done.compareAndSet(false, true)) {
-                            downstream.onComplete();
-                        }
-                    }
-                    worker.dispose();
+                if (queue.isEmpty() && checkTerminated()) {
                     return;
                 }
 
@@ -278,6 +305,29 @@ public final class PublishOnOperator<T> implements Publisher<T> {
                     break;
                 }
             }
+        }
+
+        /**
+         * 종료 상태를 확인하고 downstream에 시그널을 전달합니다.
+         *
+         * @return 종료되었으면 true
+         */
+        private boolean checkTerminated() {
+            if (completed) {
+                Throwable ex = error;
+                if (ex != null) {
+                    if (done.compareAndSet(false, true)) {
+                        downstream.onError(ex);
+                    }
+                } else {
+                    if (done.compareAndSet(false, true)) {
+                        downstream.onComplete();
+                    }
+                }
+                worker.dispose();
+                return true;
+            }
+            return false;
         }
 
         /**

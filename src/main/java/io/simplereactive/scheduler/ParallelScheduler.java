@@ -40,8 +40,13 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>CPU 코어 수만큼 스레드 사용 (기본값)</li>
  *   <li>병렬 처리 가능 - 여러 작업이 동시에 실행</li>
  *   <li>CPU 바운드 작업에 적합</li>
- *   <li>작업 순서 보장 안 됨 (병렬 실행)</li>
+ *   <li>schedule()은 작업 순서 보장 안 됨 (병렬 실행)</li>
  * </ul>
+ *
+ * <h2>Worker와 순차 실행</h2>
+ * <p>{@link #createWorker()}로 생성된 Worker는 내부적으로 독립적인
+ * 단일 스레드를 사용하여 작업 순서를 보장합니다.
+ * publishOn에서 사용할 때 Reactive Streams 시그널 순서가 보장됩니다.
  *
  * <h2>학습 포인트</h2>
  * <ul>
@@ -49,11 +54,6 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>Reactive Streams 시그널 순서는 Worker 단위로 보장</li>
  *   <li>CPU 집약적 변환 작업(map)에 적합</li>
  * </ul>
- *
- * <h2>주의사항</h2>
- * <p>publishOn에서 ParallelScheduler를 사용할 때, 각 Subscriber는
- * 자신의 Worker를 사용하므로 시그널 순서가 보장됩니다.
- * 단, 여러 Subscriber 간의 실행 순서는 보장되지 않습니다.
  *
  * @see Schedulers#parallel()
  */
@@ -66,6 +66,7 @@ public final class ParallelScheduler implements Scheduler {
     private final AtomicBoolean disposed = new AtomicBoolean(false);
     private final String name;
     private final int parallelism;
+    private final AtomicLong workerCounter = new AtomicLong(0);
 
     /**
      * CPU 코어 수만큼의 스레드를 사용하는 ParallelScheduler를 생성합니다.
@@ -109,6 +110,9 @@ public final class ParallelScheduler implements Scheduler {
     /**
      * 스레드 풀에서 작업을 비동기로 실행합니다.
      *
+     * <p>작업은 풀의 여러 스레드에서 병렬로 실행될 수 있으며,
+     * 순서가 보장되지 않습니다.
+     *
      * @param task 실행할 작업
      * @return 작업 취소를 위한 Disposable
      * @throws NullPointerException task가 null인 경우
@@ -132,14 +136,17 @@ public final class ParallelScheduler implements Scheduler {
     /**
      * 새로운 ParallelWorker를 생성합니다.
      *
-     * <p>각 Worker는 순차적으로 작업을 실행하여
-     * Reactive Streams 시그널 순서를 보장합니다.
+     * <p>각 Worker는 독립적인 단일 스레드를 사용하여 작업을 순차적으로 실행합니다.
+     * 이를 통해 Reactive Streams 시그널 순서가 보장됩니다.
+     *
+     * <p><b>주의:</b> Worker 사용 후 반드시 {@link Worker#dispose()}를 호출하여
+     * 스레드 리소스를 해제해야 합니다.
      *
      * @return ParallelWorker 인스턴스
      */
     @Override
     public Worker createWorker() {
-        return new ParallelWorker();
+        return new ParallelWorker(name + "-worker-" + workerCounter.incrementAndGet());
     }
 
     /**
@@ -174,44 +181,34 @@ public final class ParallelScheduler implements Scheduler {
     }
 
     /**
-     * Future를 래핑하는 Disposable.
-     */
-    private static final class FutureDisposable implements Disposable {
-        private final Future<?> future;
-
-        FutureDisposable(Future<?> future) {
-            this.future = future;
-        }
-
-        @Override
-        public void dispose() {
-            future.cancel(false);
-        }
-
-        @Override
-        public boolean isDisposed() {
-            return future.isDone() || future.isCancelled();
-        }
-    }
-
-    /**
-     * 병렬 스레드 풀 Worker.
+     * 순차 실행을 보장하는 Worker.
      *
-     * <p>Worker 내에서 스케줄된 작업들은 순차적으로 실행됩니다.
+     * <p>독립적인 단일 스레드 ExecutorService를 사용하여
+     * 작업들이 FIFO 순서로 실행되도록 보장합니다.
+     * 이는 Reactive Streams 시그널 순서 보장에 필수적입니다.
      */
-    private final class ParallelWorker implements Worker {
-        private final AtomicBoolean workerDisposed = new AtomicBoolean(false);
+    private static final class ParallelWorker implements Worker {
+        private final ExecutorService workerExecutor;
+        private final AtomicBoolean disposed = new AtomicBoolean(false);
+
+        ParallelWorker(String name) {
+            this.workerExecutor = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, name);
+                t.setDaemon(true);
+                return t;
+            });
+        }
 
         @Override
         public Disposable schedule(Runnable task) {
             Objects.requireNonNull(task, "Task must not be null");
 
-            if (workerDisposed.get() || disposed.get()) {
+            if (disposed.get()) {
                 return Disposable.DISPOSED;
             }
 
             try {
-                Future<?> future = executor.submit(task);
+                Future<?> future = workerExecutor.submit(task);
                 return new FutureDisposable(future);
             } catch (RejectedExecutionException e) {
                 return Disposable.DISPOSED;
@@ -220,12 +217,14 @@ public final class ParallelScheduler implements Scheduler {
 
         @Override
         public void dispose() {
-            workerDisposed.set(true);
+            if (disposed.compareAndSet(false, true)) {
+                workerExecutor.shutdownNow();
+            }
         }
 
         @Override
         public boolean isDisposed() {
-            return workerDisposed.get();
+            return disposed.get();
         }
     }
 }

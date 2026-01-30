@@ -136,37 +136,18 @@ public final class SingleThreadScheduler implements Scheduler {
     }
 
     /**
-     * Future를 래핑하는 Disposable.
-     */
-    private static final class FutureDisposable implements Disposable {
-        private final Future<?> future;
-
-        FutureDisposable(Future<?> future) {
-            this.future = future;
-        }
-
-        @Override
-        public void dispose() {
-            future.cancel(false);
-        }
-
-        @Override
-        public boolean isDisposed() {
-            return future.isDone() || future.isCancelled();
-        }
-    }
-
-    /**
      * 단일 스레드 Worker.
+     *
+     * <p>Scheduler의 단일 스레드를 공유하므로 작업 순서가 보장됩니다.
      */
     private final class SingleWorker implements Worker {
-        private final AtomicBoolean workerDisposed = new AtomicBoolean(false);
+        private final AtomicBoolean disposed = new AtomicBoolean(false);
 
         @Override
         public Disposable schedule(Runnable task) {
             Objects.requireNonNull(task, "Task must not be null");
 
-            if (workerDisposed.get() || disposed.get()) {
+            if (disposed.get() || SingleThreadScheduler.this.disposed.get()) {
                 return Disposable.DISPOSED;
             }
 
@@ -180,12 +161,12 @@ public final class SingleThreadScheduler implements Scheduler {
 
         @Override
         public void dispose() {
-            workerDisposed.set(true);
+            disposed.set(true);
         }
 
         @Override
         public boolean isDisposed() {
-            return workerDisposed.get();
+            return disposed.get();
         }
     }
 }

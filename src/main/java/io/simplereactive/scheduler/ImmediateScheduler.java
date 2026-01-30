@@ -1,6 +1,7 @@
 package io.simplereactive.scheduler;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 현재 스레드에서 즉시 작업을 실행하는 Scheduler.
@@ -100,16 +101,18 @@ public final class ImmediateScheduler implements Scheduler {
 
     /**
      * 현재 스레드에서 즉시 작업을 실행하는 Worker.
+     *
+     * <p>다른 Worker들과 동일하게 AtomicBoolean을 사용하여 일관성을 유지합니다.
      */
     private static final class ImmediateWorker implements Worker {
 
-        private volatile boolean disposed = false;
+        private final AtomicBoolean disposed = new AtomicBoolean(false);
 
         @Override
         public Disposable schedule(Runnable task) {
             Objects.requireNonNull(task, "Task must not be null");
             
-            if (disposed) {
+            if (disposed.get()) {
                 return Disposable.DISPOSED;
             }
             
@@ -119,12 +122,12 @@ public final class ImmediateScheduler implements Scheduler {
 
         @Override
         public void dispose() {
-            disposed = true;
+            disposed.set(true);
         }
 
         @Override
         public boolean isDisposed() {
-            return disposed;
+            return disposed.get();
         }
     }
 }
