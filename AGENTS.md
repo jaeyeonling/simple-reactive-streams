@@ -5,40 +5,66 @@ Reactive Streams 스펙을 직접 구현하며 학습하는 PBL(Problem-Based Le
 ## Tech Stack
 
 - Language: Java 25
-- Build: Gradle 8.14 (Kotlin DSL)
-- Testing: JUnit 6 + Reactive Streams TCK
+- Build: Gradle 8.14 (Kotlin DSL) - Multi-module
+- Testing: JUnit 6 + Reactive Streams TCK (TestNG)
 - Package: io.simplereactive
 
 ## Commands
 
 ```bash
-# 빌드
+# 전체 빌드
 ./gradlew build
 
-# 테스트
-./gradlew test
+# core 모듈 테스트
+./gradlew :simple-reactive-core:test
+
+# example 모듈 테스트
+./gradlew :simple-reactive-example:test
 
 # TCK 테스트 (규약 검증)
-./gradlew tckTest
+./gradlew :simple-reactive-core:tckTest
 
-# 특정 모듈 테스트
-./gradlew test --tests "io.simplereactive.publisher.*"
+# 특정 테스트
+./gradlew :simple-reactive-core:test --tests "io.simplereactive.publisher.*"
 ```
 
 ## Project Structure
 
 ```
-src/main/java/io/simplereactive/
-├── core/           # Publisher, Subscriber, Subscription, Processor 인터페이스
-├── publisher/      # ArrayPublisher, RangePublisher, EmptyPublisher 등
-├── subscriber/     # LoggingSubscriber, BufferedSubscriber
-├── subscription/   # BaseSubscription, SubscriptionState (상태 머신)
-├── operator/       # Map, Filter, FlatMap, Take 등
-├── scheduler/      # ImmediateScheduler, ThreadPoolScheduler
-├── support/        # SignalLogger, RuleValidator, MarbleDiagram
-└── test/           # TestSubscriber, StepVerifier
+simple-reactivestreams/
+├── simple-reactive-core/           # 핵심 라이브러리
+│   └── src/main/java/io/simplereactive/
+│       ├── core/           # Publisher, Subscriber, Subscription, Processor, Flux
+│       ├── publisher/      # ArrayPublisher, RangePublisher, DeferPublisher, ...
+│       ├── subscriber/     # BufferedSubscriber, OverflowStrategy
+│       ├── subscription/   # BaseSubscription, ArraySubscription, ...
+│       ├── operator/       # Map, Filter, Take, Zip, OnErrorResume, ...
+│       ├── scheduler/      # Scheduler, Schedulers, SingleThread, Parallel
+│       └── test/           # TestSubscriber
+│
+├── simple-reactive-example/        # Module 9 실전 예제
+│   └── src/main/java/io/simplereactive/example/
+│       ├── Product, Review, Inventory, ProductDetail  # 도메인 모델
+│       ├── MockApis                                    # Mock API
+│       ├── LegacyProductService                        # Thread/Future 기반
+│       └── ReactiveProductService                      # Reactive 방식
+│
+└── docs/                           # PBL 학습 문서 (Module 0-9)
+```
 
-docs/               # PBL 학습 문서 (Module 0-8)
+## Learning Modules
+
+```
+Module 0: 시작하기           - 환경 설정, Reactive 소개
+Module 1: 핵심 인터페이스     - Publisher, Subscriber, Subscription, Processor
+Module 2: 첫 번째 Publisher  - ArrayPublisher 구현
+Module 3: Backpressure      - request(n), Demand 관리
+Module 4: Operators         - map, filter, take
+Module 5: 에러 처리          - onError, 복구 전략
+Module 6: Scheduler         - subscribeOn, publishOn
+Module 7: Hot vs Cold       - HotPublisher, ConnectableFlux
+Module 8: TCK 검증          - Reactive Streams TCK로 규약 검증
+Module 9: 레거시 리팩터링     - 실전 프로젝트 (simple-reactive-example)
 ```
 
 ## Code Style

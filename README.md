@@ -33,27 +33,42 @@ Reactor나 RxJava를 사용하면서 이런 의문이 들었던 적 없나요?
 
 ## 브랜치 기반 학습
 
-각 모듈은 독립된 브랜치로 관리됩니다. 원하는 단계부터 시작하거나, 막혔을 때 다음 단계의 정답을 참고할 수 있습니다.
+각 모듈은 독립된 브랜치로 관리됩니다.
 
-### 특정 모듈부터 시작하기
+> **중요: 브랜치는 참고용입니다!**
+> 
+> 각 브랜치는 제가 학습한 순서와 과정을 기록한 것일 뿐입니다.
+> **브랜치를 참고하지 않고 직접 구현할수록 더 깊이 있는 학습이 됩니다.**
+> 
+> - 막히더라도 먼저 스스로 고민해보세요
+> - Reactive Streams 스펙 문서를 직접 읽어보세요
+> - 정말 막힐 때만 브랜치를 참고하세요
+
+### 추천 학습 방법
 
 ```bash
-# Module 2부터 시작하고 싶다면
+# 1. main 브랜치에서 시작 (완성된 코드)
+git checkout main
+
+# 2. docs/ 폴더의 각 모듈 문서를 읽고 직접 구현해보기
+#    (완성된 코드는 참고하지 않고!)
+
+# 3. 정말 막힐 때만 해당 모듈 브랜치 참고
+git diff main module-2-publisher  # 차이점 확인
+```
+
+### 브랜치 활용 (참고용)
+
+```bash
+# 특정 모듈의 구현 과정이 궁금할 때
 git checkout module-2-publisher
-```
+git log --oneline
 
-### 다음 단계 정답 확인하기
-
-```bash
-# 현재 Module 2를 진행 중인데, Module 3의 정답이 궁금하다면
+# 두 모듈 간의 변경사항 확인
 git diff module-2-publisher module-3-backpressure
-```
 
-### 특정 모듈의 변경사항만 보기
-
-```bash
-# Module 3에서 무엇이 추가되었는지 확인
-git log module-2-publisher..module-3-backpressure --oneline
+# 특정 파일의 변화 추적
+git log -p --follow -- src/main/java/io/simplereactive/publisher/ArrayPublisher.java
 ```
 
 ## 빠른 시작
@@ -80,15 +95,24 @@ cd simple-reactivestreams
 
 ### 4. 학습 시작
 
-```bash
-# Module 0부터 시작
-git checkout module-0-setup
+`docs/` 폴더의 모듈 문서를 순서대로 읽고, **직접 구현**해보세요!
 
-# 또는 원하는 모듈부터
-git checkout module-2-publisher
+```bash
+# docs/module-0-intro/README.md 부터 시작
+# 완성된 코드를 보지 않고 직접 구현하는 것이 핵심입니다
 ```
 
+> **Tip**: 막히면 Reactive Streams 스펙을 먼저 읽어보세요.
+> 브랜치 참고는 최후의 수단으로!
+
 ## 학습 방법
+
+### 핵심 원칙: 직접 구현하기
+
+> **가장 효과적인 학습은 코드를 직접 작성하는 것입니다.**
+> 
+> 완성된 코드를 읽는 것만으로는 Reactive Streams의 복잡한 규약을 이해하기 어렵습니다.
+> 직접 구현하고, 테스트를 실패시키고, 디버깅하는 과정에서 진정한 이해가 생깁니다.
 
 ### PBL (Problem-Based Learning) 사이클
 
@@ -115,47 +139,62 @@ git checkout module-2-publisher
 
 ### 각 모듈 학습 흐름
 
-1. **브랜치 체크아웃**: 해당 모듈 브랜치로 이동
-2. **문서 읽기**: `docs/module-N-xxx/README.md` 학습
-3. **코드 구현**: `src/main/java`의 TODO 부분 완성
-4. **테스트 실행**: `./gradlew test`로 검증
-5. **다음 모듈**: 완료 후 다음 브랜치로 이동
+1. **문서 읽기**: `docs/module-N-xxx/README.md`에서 개념 학습
+2. **직접 구현**: 문서를 보고 코드를 직접 작성 (완성된 코드 참고 X)
+3. **테스트 실행**: `./gradlew test`로 구현 검증
+4. **디버깅**: 실패한 테스트를 분석하고 수정
+5. **심화 학습**: 실제 Reactor/RxJava 코드와 비교
+
+> **막혔을 때만** 해당 모듈 브랜치를 참고하세요.
+> 스스로 해결할수록 더 깊이 있는 학습이 됩니다!
 
 ## 프로젝트 구조
 
 ```
-src/main/java/io/simplereactive/
-├── core/           # Publisher, Subscriber, Subscription, Processor, Flux 인터페이스
-├── publisher/      # ArrayPublisher, RangePublisher, EmptyPublisher, ErrorPublisher, HotPublisher
-├── subscriber/     # BufferedSubscriber, OverflowStrategy
-├── subscription/   # BaseSubscription, ArraySubscription, BufferedSubscription
-├── operator/       # Map, Filter, Take, OnErrorResume, SubscribeOn, PublishOn
-├── scheduler/      # Scheduler, Schedulers, ImmediateScheduler, SingleThreadScheduler, ParallelScheduler
-└── test/           # TestSubscriber, ManualSubscription
-
-docs/               # PBL 학습 문서 (Module 0-9)
+simple-reactivestreams/
+├── simple-reactive-core/           # 핵심 라이브러리
+│   └── src/main/java/io/simplereactive/
+│       ├── core/           # Publisher, Subscriber, Subscription, Processor, Flux
+│       ├── publisher/      # ArrayPublisher, RangePublisher, DeferPublisher, HotPublisher
+│       ├── subscriber/     # BufferedSubscriber, OverflowStrategy
+│       ├── subscription/   # BaseSubscription, ArraySubscription, BufferedSubscription
+│       ├── operator/       # Map, Filter, Take, Zip, OnErrorResume, SubscribeOn, PublishOn
+│       ├── scheduler/      # Scheduler, Schedulers, SingleThread, Parallel
+│       └── test/           # TestSubscriber
+│
+├── simple-reactive-example/        # Module 9 실전 예제
+│   └── src/main/java/io/simplereactive/example/
+│       ├── Product, Review, Inventory, ProductDetail  # 도메인 모델
+│       ├── MockApis                                    # Mock API
+│       ├── LegacyProductService                        # Thread/Future 기반 (비교용)
+│       └── ReactiveProductService                      # Reactive 방식
+│
+└── docs/                           # PBL 학습 문서 (Module 0-9)
 ```
 
 ## 명령어
 
 ```bash
-# 빌드
+# 전체 빌드
 ./gradlew build
 
-# 테스트
-./gradlew test
+# core 모듈 테스트
+./gradlew :simple-reactive-core:test
+
+# example 모듈 테스트
+./gradlew :simple-reactive-example:test
 
 # TCK 테스트 (규약 검증)
-./gradlew tckTest
+./gradlew :simple-reactive-core:tckTest
 
-# 특정 모듈 테스트
-./gradlew test --tests "io.simplereactive.publisher.*"
+# 특정 테스트
+./gradlew :simple-reactive-core:test --tests "io.simplereactive.publisher.*"
 ```
 
 ## Tech Stack
 
 - **Language**: Java 25
-- **Build**: Gradle 8.14 (Kotlin DSL)
+- **Build**: Gradle 8.14 (Kotlin DSL) - Multi-module
 - **Testing**: JUnit 6 + AssertJ + Reactive Streams TCK
 - **Package**: io.simplereactive
 
