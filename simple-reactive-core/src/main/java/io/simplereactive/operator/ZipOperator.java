@@ -3,6 +3,7 @@ package io.simplereactive.operator;
 import io.simplereactive.core.Publisher;
 import io.simplereactive.core.Subscriber;
 import io.simplereactive.core.Subscription;
+import io.simplereactive.core.TriFunction;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -124,6 +125,7 @@ public class ZipOperator<T1, T2, R> implements Publisher<R> {
      * @param <T3> 세 번째 타입
      * @param <R> 결과 타입
      * @return 조합된 Publisher
+     * @see TriFunction
      */
     public static <T1, T2, T3, R> Publisher<R> zip(
             Publisher<T1> source1,
@@ -135,14 +137,6 @@ public class ZipOperator<T1, T2, R> implements Publisher<R> {
         Objects.requireNonNull(source3, "Source3 must not be null");
         Objects.requireNonNull(combinator, "Combinator must not be null");
         return new Zip3Publisher<>(source1, source2, source3, combinator);
-    }
-
-    /**
-     * 세 인자를 받는 함수형 인터페이스.
-     */
-    @FunctionalInterface
-    public interface TriFunction<T1, T2, T3, R> {
-        R apply(T1 t1, T2 t2, T3 t3);
     }
 
     // ========== Zip2 Coordinator ==========

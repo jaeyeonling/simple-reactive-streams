@@ -1,9 +1,6 @@
 package io.simplereactive.example;
 
 import io.simplereactive.core.Flux;
-import io.simplereactive.core.Publisher;
-import io.simplereactive.operator.ZipOperator;
-import io.simplereactive.publisher.DeferPublisher;
 import io.simplereactive.scheduler.Scheduler;
 import io.simplereactive.scheduler.Schedulers;
 
@@ -12,13 +9,13 @@ import java.util.List;
 /**
  * Reactive 방식 상품 서비스.
  *
- * <p>DeferPublisher와 ZipOperator를 사용하여 논블로킹으로 API를 조합합니다.
+ * <p>Flux.defer()와 Flux.zip()을 사용하여 논블로킹으로 API를 조합합니다.
  * {@link LegacyProductService}의 문제점을 해결합니다.
  *
  * <h2>장점</h2>
  * <ol>
  *   <li><strong>논블로킹</strong>: 스레드가 대기하지 않음</li>
- *   <li><strong>선언적 조합</strong>: ZipOperator로 깔끔하게 조합</li>
+ *   <li><strong>선언적 조합</strong>: Flux.zip()으로 깔끔하게 조합</li>
  *   <li><strong>에러 처리</strong>: onErrorResume으로 우아한 복구</li>
  *   <li><strong>자동 취소</strong>: 하나가 실패하면 나머지 자동 취소</li>
  *   <li><strong>Scheduler 추상화</strong>: I/O 스레드 분리 용이</li>
@@ -34,15 +31,15 @@ import java.util.List;
  *               ├──> [IO-2] reviewApi.getReviews()
  *               ├──> [IO-3] inventoryApi.getInventory()
  *               │
- *               └──> ZipOperator가 모든 결과 조합
+ *               └──> Flux.zip()이 모든 결과 조합
  *                        │
  *                        ▼
  *                   onNext(ProductDetail)
  * </pre>
  *
  * @see LegacyProductService 레거시 방식 비교
- * @see DeferPublisher
- * @see ZipOperator
+ * @see Flux#defer
+ * @see Flux#zip
  */
 public class ReactiveProductService {
 
@@ -77,7 +74,7 @@ public class ReactiveProductService {
      * 상품 상세 정보를 조회합니다 (논블로킹).
      *
      * <p>Publisher를 반환하므로 subscribe() 전까지 실행되지 않습니다.
-     * 세 API가 병렬로 실행되며, ZipOperator가 결과를 조합합니다.
+     * 세 API가 병렬로 실행되며, Flux.zip()이 결과를 조합합니다.
      *
      * <h3>Marble Diagram</h3>
      * <pre>
@@ -85,21 +82,25 @@ public class ReactiveProductService {
      * getReviews:    ────────────────(R)──|
      * getInventory:  ────(I)──|
      *                    │
-     *               zip((p,r,i) -> detail)
+     *               Flux.zip((p,r,i) -> detail)
      *                    │
      * result:       ────────────────(detail)──|
      * </pre>
      *
      * @param productId 상품 ID
-     * @return ProductDetail Publisher
+     * @return ProductDetail Flux
      */
-    public Publisher<ProductDetail> getProductDetail(String productId) {
-        return ZipOperator.zip(
-                getProduct(productId),
-                getReviews(productId),
-                getInventory(productId),
-                ProductDetail::new
-        );
+    public Flux<ProductDetail> getProductDetail(String productId) {
+        var product = Flux.defer(() -> productApi.getProduct(productId))
+                .subscribeOn(ioScheduler);
+
+        var reviews = Flux.defer(() -> reviewApi.getReviews(productId))
+                .subscribeOn(ioScheduler);
+
+        var inventory = Flux.defer(() -> inventoryApi.getInventory(productId))
+                .subscribeOn(ioScheduler);
+
+        return Flux.zip(product, reviews, inventory, ProductDetail::new);
     }
 
     /**
@@ -113,15 +114,22 @@ public class ReactiveProductService {
      * </ul>
      *
      * @param productId 상품 ID
-     * @return ProductDetail Publisher (에러 복구 적용)
+     * @return ProductDetail Flux (에러 복구 적용)
      */
-    public Publisher<ProductDetail> getProductDetailWithFallback(String productId) {
-        return ZipOperator.zip(
-                getProductWithFallback(productId),
-                getReviewsWithFallback(productId),
-                getInventoryWithFallback(productId),
-                ProductDetail::new
-        );
+    public Flux<ProductDetail> getProductDetailWithFallback(String productId) {
+        var product = Flux.defer(() -> productApi.getProduct(productId))
+                .subscribeOn(ioScheduler)
+                .onErrorReturn(e -> new Product(productId, "Unknown Product", 0));
+
+        var reviews = Flux.<List<Review>>defer(() -> reviewApi.getReviews(productId))
+                .subscribeOn(ioScheduler)
+                .onErrorReturn(e -> List.of());
+
+        var inventory = Flux.defer(() -> inventoryApi.getInventory(productId))
+                .subscribeOn(ioScheduler)
+                .onErrorReturn(e -> new Inventory(productId, 0, false));
+
+        return Flux.zip(product, reviews, inventory, ProductDetail::new);
     }
 
     /**
@@ -129,49 +137,5 @@ public class ReactiveProductService {
      */
     public void shutdown() {
         ioScheduler.dispose();
-    }
-
-    // ========== Private API Wrappers ==========
-
-    private Publisher<Product> getProduct(String productId) {
-        // 블로킹 API를 Publisher로 래핑하고, I/O 스레드에서 실행
-        return Flux.from(new DeferPublisher<>(() ->
-                        productApi.getProduct(productId)))
-                .subscribeOn(ioScheduler);
-    }
-
-    private Publisher<List<Review>> getReviews(String productId) {
-        return Flux.from(new DeferPublisher<>(() ->
-                        reviewApi.getReviews(productId)))
-                .subscribeOn(ioScheduler);
-    }
-
-    private Publisher<Inventory> getInventory(String productId) {
-        return Flux.from(new DeferPublisher<>(() ->
-                        inventoryApi.getInventory(productId)))
-                .subscribeOn(ioScheduler);
-    }
-
-    // ========== Fallback Versions ==========
-
-    private Publisher<Product> getProductWithFallback(String productId) {
-        return Flux.from(new DeferPublisher<>(() ->
-                        productApi.getProduct(productId)))
-                .subscribeOn(ioScheduler)
-                .onErrorReturn(e -> new Product(productId, "Unknown Product", 0));
-    }
-
-    private Publisher<List<Review>> getReviewsWithFallback(String productId) {
-        return Flux.from(new DeferPublisher<>(() ->
-                        reviewApi.getReviews(productId)))
-                .subscribeOn(ioScheduler)
-                .onErrorReturn(e -> List.of());
-    }
-
-    private Publisher<Inventory> getInventoryWithFallback(String productId) {
-        return Flux.from(new DeferPublisher<>(() ->
-                        inventoryApi.getInventory(productId)))
-                .subscribeOn(ioScheduler)
-                .onErrorReturn(e -> new Inventory(productId, 0, false));
     }
 }

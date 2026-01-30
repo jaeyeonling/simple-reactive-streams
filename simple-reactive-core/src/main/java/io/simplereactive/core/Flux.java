@@ -7,15 +7,20 @@ import io.simplereactive.operator.OnErrorReturnOperator;
 import io.simplereactive.operator.PublishOnOperator;
 import io.simplereactive.operator.SubscribeOnOperator;
 import io.simplereactive.operator.TakeOperator;
+import io.simplereactive.operator.ZipOperator;
 import io.simplereactive.publisher.ArrayPublisher;
+import io.simplereactive.publisher.DeferPublisher;
 import io.simplereactive.publisher.EmptyPublisher;
 import io.simplereactive.publisher.ErrorPublisher;
 import io.simplereactive.publisher.RangePublisher;
 import io.simplereactive.scheduler.Scheduler;
 
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Operator 체이닝을 지원하는 Publisher 래퍼.
@@ -158,6 +163,134 @@ public class Flux<T> implements Publisher<T> {
      */
     public static <T> Flux<T> error(Throwable error) {
         return new Flux<>(new ErrorPublisher<>(error));
+    }
+
+    /**
+     * 블로킹 API를 지연 실행하는 Flux를 생성합니다.
+     *
+     * <p>구독 시점에 supplier를 실행하여 값을 발행합니다.
+     * 주로 블로킹 API를 Reactive 방식으로 래핑할 때 사용합니다.
+     *
+     * <h2>사용 예시</h2>
+     * <pre>{@code
+     * // 블로킹 API를 Reactive로 래핑
+     * Flux<Product> product = Flux.defer(() -> productApi.getProduct(id))
+     *     .subscribeOn(Schedulers.parallel());
+     *
+     * // 에러 복구와 함께 사용
+     * Flux<Product> safeProduct = Flux.defer(() -> productApi.getProduct(id))
+     *     .subscribeOn(Schedulers.parallel())
+     *     .onErrorReturn(new Product("unknown", "Unknown", 0));
+     * }</pre>
+     *
+     * <h2>Marble Diagram</h2>
+     * <pre>
+     * subscribe() 호출
+     *      │
+     *      └──> supplier.get() 실행
+     *               │
+     *               ▼
+     *           ──(value)──|
+     * </pre>
+     *
+     * @param supplier 값을 제공하는 함수 (블로킹 가능)
+     * @param <T> 요소 타입
+     * @return 지연 실행 Flux
+     * @throws NullPointerException supplier가 null인 경우
+     * @see DeferPublisher
+     */
+    public static <T> Flux<T> defer(Supplier<T> supplier) {
+        Objects.requireNonNull(supplier, "Supplier must not be null");
+        return new Flux<>(new DeferPublisher<>(supplier::get));
+    }
+
+    /**
+     * 두 Publisher의 결과를 조합하는 Flux를 생성합니다.
+     *
+     * <p>각 Publisher가 값을 발행하면, combinator 함수로 결과를 조합합니다.
+     * 모든 Publisher가 최소 하나의 값을 발행해야 결과가 발행됩니다.
+     *
+     * <h2>사용 예시</h2>
+     * <pre>{@code
+     * Flux<String> result = Flux.zip(
+     *     Flux.just("A"),
+     *     Flux.just("B"),
+     *     (a, b) -> a + "-" + b
+     * );
+     * // 결과: "A-B"
+     * }</pre>
+     *
+     * <h2>Marble Diagram</h2>
+     * <pre>
+     * source1: ──A────────────|
+     * source2: ────────B──────|
+     *               │
+     *          zip((a,b) -> a+b)
+     *               │
+     * result:  ────────(A+B)──|
+     * </pre>
+     *
+     * @param source1 첫 번째 Publisher
+     * @param source2 두 번째 Publisher
+     * @param combinator 조합 함수
+     * @param <T1> 첫 번째 Publisher의 요소 타입
+     * @param <T2> 두 번째 Publisher의 요소 타입
+     * @param <R> 결과 타입
+     * @return 조합된 Flux
+     * @see ZipOperator
+     */
+    public static <T1, T2, R> Flux<R> zip(
+            Publisher<T1> source1,
+            Publisher<T2> source2,
+            BiFunction<? super T1, ? super T2, ? extends R> combinator) {
+        return new Flux<>(ZipOperator.zip(source1, source2, combinator));
+    }
+
+    /**
+     * 세 Publisher의 결과를 조합하는 Flux를 생성합니다.
+     *
+     * <p>각 Publisher가 값을 발행하면, combinator 함수로 결과를 조합합니다.
+     * 주로 여러 API 호출 결과를 하나로 조합할 때 사용합니다.
+     *
+     * <h2>사용 예시</h2>
+     * <pre>{@code
+     * Flux<ProductDetail> detail = Flux.zip(
+     *     Flux.defer(() -> productApi.getProduct(id)),
+     *     Flux.defer(() -> reviewApi.getReviews(id)),
+     *     Flux.defer(() -> inventoryApi.getInventory(id)),
+     *     ProductDetail::new
+     * );
+     * }</pre>
+     *
+     * <h2>Marble Diagram</h2>
+     * <pre>
+     * source1: ──A──────────────────|
+     * source2: ────────B────────────|
+     * source3: ────────────C────────|
+     *                   │
+     *          zip((a,b,c) -> combine)
+     *                   │
+     * result:  ────────────(A+B+C)──|
+     * </pre>
+     *
+     * @param source1 첫 번째 Publisher
+     * @param source2 두 번째 Publisher
+     * @param source3 세 번째 Publisher
+     * @param combinator 조합 함수
+     * @param <T1> 첫 번째 Publisher의 요소 타입
+     * @param <T2> 두 번째 Publisher의 요소 타입
+     * @param <T3> 세 번째 Publisher의 요소 타입
+     * @param <R> 결과 타입
+     * @return 조합된 Flux
+     * @see ZipOperator
+     * @see TriFunction
+     */
+    public static <T1, T2, T3, R> Flux<R> zip(
+            Publisher<T1> source1,
+            Publisher<T2> source2,
+            Publisher<T3> source3,
+            TriFunction<? super T1, ? super T2, ? super T3, ? extends R> combinator) {
+        return new Flux<>(ZipOperator.zip(source1, source2, source3, combinator));
     }
 
     // ========== Operator 메서드 ==========
