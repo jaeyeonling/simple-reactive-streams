@@ -133,7 +133,11 @@ public final class TakeOperator<T> extends AbstractOperator<T, T> {
          */
         @Override
         public void request(long n) {
+            // Rule 3.9: n <= 0이면 onError 시그널
             if (n <= 0) {
+                cancelUpstream();
+                onError(new IllegalArgumentException(
+                        "Rule 3.9: Request must be positive, but was " + n));
                 return;
             }
 

@@ -2,6 +2,8 @@ package io.simplereactive.subscription;
 
 import io.simplereactive.core.Subscriber;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * 배열 요소를 발행하는 Subscription.
  *
@@ -15,12 +17,15 @@ import io.simplereactive.core.Subscriber;
  *   <li>cancel 호출 시 발행 중단</li>
  * </ol>
  *
+ * <h2>스레드 안전성</h2>
+ * <p>index는 AtomicInteger로 관리되어 스레드 안전합니다.
+ *
  * @param <T> 요소 타입
  */
 public class ArraySubscription<T> extends BaseSubscription<T> {
 
     private final T[] array;
-    private int index = 0;
+    private final AtomicInteger index = new AtomicInteger(0);
 
     /**
      * ArraySubscription을 생성합니다.
@@ -38,18 +43,23 @@ public class ArraySubscription<T> extends BaseSubscription<T> {
      */
     @Override
     protected void doOnRequest() {
-        while (hasDemand() && index < array.length) {
+        while (hasDemand() && index.get() < array.length) {
             if (isCancelled()) {
                 return;
             }
 
-            if (!emit(array[index++])) {
+            int i = index.getAndIncrement();
+            if (i >= array.length) {
+                break; // 다른 스레드가 먼저 증가시킨 경우
+            }
+
+            if (!emit(array[i])) {
                 return; // emit 실패 (null 또는 에러)
             }
         }
 
         // 모든 요소 발행 완료
-        if (index >= array.length) {
+        if (index.get() >= array.length) {
             complete();
         }
     }

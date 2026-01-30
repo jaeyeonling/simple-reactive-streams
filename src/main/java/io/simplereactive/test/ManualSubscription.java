@@ -5,6 +5,8 @@ import io.simplereactive.core.Subscription;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -27,18 +29,18 @@ import java.util.concurrent.atomic.AtomicLong;
  * }</pre>
  *
  * <h2>스레드 안전성</h2>
- * <p>이 클래스는 스레드 안전합니다.
+ * <p>이 클래스는 스레드 안전합니다. 모든 상태는 Atomic 연산으로 관리됩니다.
  */
 public class ManualSubscription implements Subscription {
 
     private final AtomicLong requested = new AtomicLong(0);
     private final List<Long> requestHistory = new CopyOnWriteArrayList<>();
-    private volatile boolean cancelled = false;
-    private volatile int cancelCount = 0;
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private final AtomicInteger cancelCount = new AtomicInteger(0);
 
     @Override
     public void request(long n) {
-        if (n > 0 && !cancelled) {
+        if (n > 0 && !cancelled.get()) {
             requestHistory.add(n);
             addRequest(n);
         }
@@ -46,8 +48,8 @@ public class ManualSubscription implements Subscription {
 
     @Override
     public void cancel() {
-        cancelled = true;
-        cancelCount++;
+        cancelled.set(true);
+        cancelCount.incrementAndGet();
     }
 
     /**
@@ -86,7 +88,7 @@ public class ManualSubscription implements Subscription {
      * @return 취소되었으면 true
      */
     public boolean isCancelled() {
-        return cancelled;
+        return cancelled.get();
     }
 
     /**
@@ -95,7 +97,7 @@ public class ManualSubscription implements Subscription {
      * @return cancel 호출 횟수
      */
     public int getCancelCount() {
-        return cancelCount;
+        return cancelCount.get();
     }
 
     /**
@@ -104,8 +106,8 @@ public class ManualSubscription implements Subscription {
     public void reset() {
         requested.set(0);
         requestHistory.clear();
-        cancelled = false;
-        cancelCount = 0;
+        cancelled.set(false);
+        cancelCount.set(0);
     }
 
     /**

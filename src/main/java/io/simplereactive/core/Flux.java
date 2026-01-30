@@ -349,8 +349,17 @@ public class Flux<T> implements Publisher<T> {
 
     // ========== Publisher 구현 ==========
 
+    /**
+     * {@inheritDoc}
+     *
+     * @throws NullPointerException Rule 1.9 - subscriber가 null인 경우
+     */
     @Override
     public void subscribe(Subscriber<? super T> subscriber) {
+        // Rule 1.9: null 체크를 명시적으로 수행하여 명확한 에러 메시지 제공
+        if (subscriber == null) {
+            throw new NullPointerException("Rule 1.9: Subscriber must not be null");
+        }
         source.subscribe(subscriber);
     }
 }

@@ -6,6 +6,7 @@ import io.simplereactive.core.Subscription;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
@@ -86,6 +87,11 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
         
         private final AtomicReference<Subscription> upstream = new AtomicReference<>();
         private final AtomicBoolean done = new AtomicBoolean(false);
+        
+        /** downstream이 요청한 총량에서 전달한 양을 뺀 남은 demand */
+        private final AtomicLong requested = new AtomicLong(0);
+        /** upstream에서 전달받아 downstream에 전달한 양 */
+        private final AtomicLong emitted = new AtomicLong(0);
 
         OnErrorResumeSubscriber(
                 Subscriber<? super T> downstream,
@@ -110,6 +116,7 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
             if (done.get()) {
                 return;
             }
+            emitted.incrementAndGet();
             downstream.onNext(item);
         }
 
@@ -140,8 +147,11 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
                 return;
             }
 
+            // 남은 demand 계산
+            long remainingDemand = requested.get() - emitted.get();
+            
             // fallback으로 전환
-            fallbackPublisher.subscribe(new FallbackSubscriber<>(downstream, done, upstream));
+            fallbackPublisher.subscribe(new FallbackSubscriber<>(downstream, done, upstream, remainingDemand));
         }
 
         @Override
@@ -155,6 +165,15 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
 
         @Override
         public void request(long n) {
+            if (n <= 0) {
+                return;
+            }
+            // demand 추적 (overflow 방지)
+            requested.getAndUpdate(current -> {
+                long next = current + n;
+                return next < 0 ? Long.MAX_VALUE : next;
+            });
+            
             Subscription s = upstream.get();
             if (s != null) {
                 s.request(n);
@@ -174,29 +193,35 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
 
     /**
      * Fallback Publisher를 구독하는 Subscriber.
+     * 
+     * <p>에러 발생 전까지의 남은 demand를 추적하여 fallback에 요청합니다.
      */
     private static final class FallbackSubscriber<T> implements Subscriber<T> {
 
         private final Subscriber<? super T> downstream;
         private final AtomicBoolean done;
         private final AtomicReference<Subscription> subscriptionRef;
+        private final long initialDemand;
 
         FallbackSubscriber(
                 Subscriber<? super T> downstream,
                 AtomicBoolean done,
-                AtomicReference<Subscription> subscriptionRef) {
+                AtomicReference<Subscription> subscriptionRef,
+                long initialDemand) {
             this.downstream = downstream;
             this.done = done;
             this.subscriptionRef = subscriptionRef;
+            this.initialDemand = initialDemand;
         }
 
         @Override
         public void onSubscribe(Subscription s) {
             // 기존 upstream을 fallback subscription으로 교체
-            Subscription old = subscriptionRef.getAndSet(s);
-            // downstream이 이미 request한 양을 다시 요청
-            // 여기서는 간단히 unbounded로 처리
-            s.request(Long.MAX_VALUE);
+            subscriptionRef.set(s);
+            // 남은 demand만큼 요청
+            if (initialDemand > 0) {
+                s.request(initialDemand);
+            }
         }
 
         @Override

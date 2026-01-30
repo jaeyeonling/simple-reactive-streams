@@ -275,9 +275,17 @@ public final class PublishOnOperator<T> implements Publisher<T> {
                     try {
                         downstream.onNext(item);
                     } catch (Throwable ex) {
-                        // downstream에서 예외 발생 시 취소하고 정리
-                        cancel();
+                        // Rule 2.13: downstream에서 예외 발생 시 upstream 취소 후 에러 전파
+                        // (규약상 downstream은 예외를 던지면 안 되지만 방어적 처리)
+                        Subscription s = upstream.get();
+                        if (s != null) {
+                            s.cancel();
+                        }
                         queue.clear();
+                        if (done.compareAndSet(false, true)) {
+                            downstream.onError(ex);
+                        }
+                        worker.dispose();
                         return;
                     }
                     e++;
