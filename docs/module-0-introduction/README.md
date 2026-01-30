@@ -166,7 +166,7 @@ IntelliJ IDEA:
 ## 4. 프로젝트 구조 이해
 
 ```
-simple-reactivestreams/
+simple-reactive-streams/
 ├── src/main/java/io/simplereactive/
 │   ├── core/           # 핵심 인터페이스 (여기서 시작!)
 │   ├── publisher/      # Publisher 구현체
