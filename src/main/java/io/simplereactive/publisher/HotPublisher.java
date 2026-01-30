@@ -261,11 +261,20 @@ public class HotPublisher<T> implements Publisher<T> {
          * <p>발행 속도는 외부에서 emit()을 호출하는 속도에 의해 결정됩니다.
          * 실제 운영 환경에서는 버퍼링이나 샘플링 전략이 필요합니다.
          *
-         * @param n 요청량 (무시됨)
+         * <p>단, Rule 3.9에 따라 n <= 0인 경우는 에러를 시그널합니다.
+         *
+         * @param n 요청량 (양수일 때 무시됨, 0 이하일 때 에러)
          */
         @Override
         public void request(long n) {
-            // Hot Publisher는 demand를 무시
+            // Rule 3.9: n <= 0이면 에러 시그널
+            if (n <= 0) {
+                cancel();
+                subscriber.onError(new IllegalArgumentException(
+                        "Rule 3.9: request amount must be positive, but was " + n));
+                return;
+            }
+            // Hot Publisher는 양수 demand를 무시
             // 발행 속도는 emit() 호출 속도에 의해 결정됨
         }
 

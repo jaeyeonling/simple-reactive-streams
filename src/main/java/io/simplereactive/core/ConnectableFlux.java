@@ -295,7 +295,14 @@ public class ConnectableFlux<T> implements Publisher<T> {
 
         @Override
         public void request(long n) {
-            // ConnectableFlux는 demand를 무시 (브로드캐스트 모드)
+            // Rule 3.9: n <= 0이면 에러 시그널
+            if (n <= 0) {
+                cancel();
+                subscriber.onError(new IllegalArgumentException(
+                        "Rule 3.9: request amount must be positive, but was " + n));
+                return;
+            }
+            // ConnectableFlux는 양수 demand를 무시 (브로드캐스트 모드)
         }
 
         @Override

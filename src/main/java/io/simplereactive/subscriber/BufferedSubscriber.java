@@ -5,6 +5,7 @@ import io.simplereactive.core.Subscription;
 import io.simplereactive.subscription.BufferedSubscription;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 버퍼를 사용하여 Backpressure를 처리하는 Subscriber.
@@ -42,7 +43,7 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
     private final int bufferSize;
     private final OverflowStrategy strategy;
 
-    private volatile BufferedSubscription<T> subscription;
+    private final AtomicReference<BufferedSubscription<T>> subscription = new AtomicReference<>();
 
     /**
      * BufferedSubscriber를 생성합니다.
@@ -78,16 +79,22 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
 
     @Override
     public void onSubscribe(Subscription s) {
-        // Rule 2.5: 중복 구독 방지
-        if (this.subscription != null) {
+        // Rule 2.5: 중복 구독 방지 (atomic하게 체크)
+        BufferedSubscription<T> newSubscription = 
+                new BufferedSubscription<>(downstream, s, bufferSize, strategy);
+        
+        if (!subscription.compareAndSet(null, newSubscription)) {
+            // 이미 구독이 있으면 새 구독 취소
             s.cancel();
-            subscription.onError(new IllegalStateException(
-                    "Rule 2.5: onSubscribe must not be called more than once"));
+            BufferedSubscription<T> existing = subscription.get();
+            if (existing != null) {
+                existing.onError(new IllegalStateException(
+                        "Rule 2.5: onSubscribe must not be called more than once"));
+            }
             return;
         }
 
-        this.subscription = new BufferedSubscription<>(downstream, s, bufferSize, strategy);
-        downstream.onSubscribe(subscription);
+        downstream.onSubscribe(newSubscription);
 
         // prefetch: 버퍼 크기만큼 미리 요청
         s.request(bufferSize);
@@ -95,7 +102,7 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
 
     @Override
     public void onNext(T item) {
-        BufferedSubscription<T> s = this.subscription;
+        BufferedSubscription<T> s = subscription.get();
         if (s != null) {
             s.onNext(item);
         }
@@ -103,7 +110,7 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
 
     @Override
     public void onError(Throwable t) {
-        BufferedSubscription<T> s = this.subscription;
+        BufferedSubscription<T> s = subscription.get();
         if (s != null) {
             s.onError(t);
         }
@@ -111,7 +118,7 @@ public class BufferedSubscriber<T> implements Subscriber<T> {
 
     @Override
     public void onComplete() {
-        BufferedSubscription<T> s = this.subscription;
+        BufferedSubscription<T> s = subscription.get();
         if (s != null) {
             s.onComplete();
         }

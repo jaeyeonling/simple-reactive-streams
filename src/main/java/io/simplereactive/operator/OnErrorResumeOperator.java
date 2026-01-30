@@ -165,7 +165,11 @@ public final class OnErrorResumeOperator<T> implements Publisher<T> {
 
         @Override
         public void request(long n) {
+            // Rule 3.9: n <= 0이면 에러 시그널
             if (n <= 0) {
+                cancel();
+                downstream.onError(new IllegalArgumentException(
+                        "Rule 3.9: request amount must be positive, but was " + n));
                 return;
             }
             // demand 추적 (overflow 방지)

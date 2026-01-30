@@ -40,11 +40,17 @@ public final class RangePublisher implements Publisher<Integer> {
      *
      * @param start 시작값 (포함)
      * @param count 발행할 개수
-     * @throws IllegalArgumentException count가 음수인 경우
+     * @throws IllegalArgumentException count가 음수이거나, start + count가 Integer.MAX_VALUE를 초과하는 경우
      */
     public RangePublisher(int start, int count) {
         if (count < 0) {
             throw new IllegalArgumentException("Count must not be negative, but was " + count);
+        }
+        // Integer overflow 체크: start + count > Integer.MAX_VALUE
+        // long으로 변환하여 안전하게 비교
+        if ((long) start + count > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                    "Range overflow: start(" + start + ") + count(" + count + ") exceeds Integer.MAX_VALUE");
         }
         this.start = start;
         this.count = count;
@@ -130,14 +136,15 @@ public final class RangePublisher implements Publisher<Integer> {
                         return;
                     }
 
-                    int value = current.get();
+                    // getAndIncrement로 atomic하게 값을 가져오고 증가
+                    int value = current.getAndIncrement();
                     if (value >= end) {
+                        // 범위를 벗어난 경우 완료
                         subscriber.onComplete();
                         return;
                     }
 
                     subscriber.onNext(value);
-                    current.incrementAndGet();
                     emitted++;
                 }
 
