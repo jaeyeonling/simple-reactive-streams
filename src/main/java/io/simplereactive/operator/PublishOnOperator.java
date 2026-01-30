@@ -218,16 +218,10 @@ public final class PublishOnOperator<T> implements Publisher<T> {
             }
             
             // demand 추가 (overflow 방지)
-            for (;;) {
-                long current = requested.get();
+            requested.getAndUpdate(current -> {
                 long next = current + n;
-                if (next < 0) {
-                    next = Long.MAX_VALUE;
-                }
-                if (requested.compareAndSet(current, next)) {
-                    break;
-                }
-            }
+                return next < 0 ? Long.MAX_VALUE : next;
+            });
             
             // upstream에 요청 전달
             Subscription s = upstream.get();
