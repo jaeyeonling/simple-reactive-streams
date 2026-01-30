@@ -83,8 +83,8 @@ java -version    # Java 25 이상
 ### 2. 프로젝트 클론
 
 ```bash
-git clone https://github.com/jaeyeonling/simple-reactivestreams.git
-cd simple-reactivestreams
+git clone https://github.com/jaeyeonling/simple-reactive-streams.git
+cd simple-reactive-streams
 ```
 
 ### 3. 빌드 확인
@@ -151,7 +151,7 @@ cd simple-reactivestreams
 ## 프로젝트 구조
 
 ```
-simple-reactivestreams/
+simple-reactive-streams/
 ├── simple-reactive-core/           # 핵심 라이브러리
 │   └── src/main/java/io/simplereactive/
 │       ├── core/           # Publisher, Subscriber, Subscription, Processor, Flux
