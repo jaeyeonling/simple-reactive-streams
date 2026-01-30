@@ -247,7 +247,7 @@ HotPublisher<Event> userEvents = createUserEventPublisher();
 
 ## 다음 단계
 
-Module 8에서는 배운 내용을 실전에 적용합니다!
+Module 8에서는 TCK를 사용해 구현체를 공식 검증합니다.
 
 ```bash
 /learn 8

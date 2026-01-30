@@ -26,9 +26,10 @@ Reactor나 RxJava를 사용하면서 이런 의문이 들었던 적 없나요?
 | 5 | 에러 처리 | 1.5시간 | ★★★☆☆ | `module-5-errors` |
 | 6 | Scheduler | 2.5시간 | ★★★★★ | `module-6-scheduler` |
 | 7 | Hot vs Cold | 1.5시간 | ★★★☆☆ | `module-7-hot-cold` |
-| 8 | 실전 프로젝트 | 3~4시간 | ★★★★★ | `module-8-project` |
+| 8 | TCK 검증 | 2시간 | ★★★☆☆ | `module-8-tck` |
+| 9 | 실전 프로젝트 | 3~4시간 | ★★★★★ | `module-9-project` |
 
-**총 학습 시간: 약 17~18시간**
+**총 학습 시간: 약 19~20시간**
 
 ## 브랜치 기반 학습
 
@@ -124,16 +125,15 @@ git checkout module-2-publisher
 
 ```
 src/main/java/io/simplereactive/
-├── core/           # Publisher, Subscriber, Subscription, Processor 인터페이스
-├── publisher/      # ArrayPublisher, RangePublisher, EmptyPublisher 등
-├── subscriber/     # LoggingSubscriber, BufferedSubscriber
-├── subscription/   # BaseSubscription, SubscriptionState (상태 머신)
-├── operator/       # Map, Filter, FlatMap, Take 등
-├── scheduler/      # ImmediateScheduler, ThreadPoolScheduler
-├── support/        # SignalLogger, RuleValidator, MarbleDiagram
-└── test/           # TestSubscriber, StepVerifier
+├── core/           # Publisher, Subscriber, Subscription, Processor, Flux 인터페이스
+├── publisher/      # ArrayPublisher, RangePublisher, EmptyPublisher, ErrorPublisher, HotPublisher
+├── subscriber/     # BufferedSubscriber, OverflowStrategy
+├── subscription/   # BaseSubscription, ArraySubscription, BufferedSubscription
+├── operator/       # Map, Filter, Take, OnErrorResume, SubscribeOn, PublishOn
+├── scheduler/      # Scheduler, Schedulers, ImmediateScheduler, SingleThreadScheduler, ParallelScheduler
+└── test/           # TestSubscriber, ManualSubscription
 
-docs/               # PBL 학습 문서 (Module 0-8)
+docs/               # PBL 학습 문서 (Module 0-9)
 ```
 
 ## 명령어
@@ -146,7 +146,7 @@ docs/               # PBL 학습 문서 (Module 0-8)
 ./gradlew test
 
 # TCK 테스트 (규약 검증)
-./gradlew test --tests "*Tck*"
+./gradlew tckTest
 
 # 특정 모듈 테스트
 ./gradlew test --tests "io.simplereactive.publisher.*"
