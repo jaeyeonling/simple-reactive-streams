@@ -19,7 +19,7 @@ Reactive Streams 스펙을 직접 구현하며 학습하는 PBL(Problem-Based Le
 ./gradlew test
 
 # TCK 테스트 (규약 검증)
-./gradlew test --tests "*Tck*"
+./gradlew tckTest
 
 # 특정 모듈 테스트
 ./gradlew test --tests "io.simplereactive.publisher.*"
